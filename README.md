@@ -17,6 +17,7 @@ This project provides configuration files for **legal, open-source software** de
 | **[Setup Guide](docs/SETUP.md)** | Step-by-step deployment |
 | [Quick Reference](docs/REFERENCE.md) | URLs, commands, IPs |
 | [Updating](docs/UPDATING.md) | Pull updates, redeploy |
+| [Backup & Restore](docs/BACKUP.md) | Backup configs, restore |
 | [Home Assistant](docs/HOME-ASSISTANT.md) | Notifications integration |
 | [Legal](docs/LEGAL.md) | Intended use, disclaimer |
 
@@ -104,7 +105,7 @@ Ask Claude to help deploy the stack - it reads [`.claude/instructions.md`](.clau
 
 ## Security
 
-Admin services (Sonarr, Radarr, etc.) are local-only by design - not exposed via Cloudflare Tunnel. Still recommend enabling auth - see [Security Checklist](docs/SETUP.md#59-security-checklist).
+Admin services (Sonarr, Radarr, etc.) are local-only by design - not exposed via Cloudflare Tunnel. Still recommend enabling auth.
 
 ## License
 

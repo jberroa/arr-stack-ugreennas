@@ -502,24 +502,15 @@ Issues? [Report on GitHub](https://github.com/Pharkie/arr-stack-ugreennas/issues
 
 ## Backup
 
-Service configurations are stored in Docker named volumes. To back them up:
+Service configs are stored in Docker named volumes. Run periodic backups:
 
 ```bash
-# Run on NAS
-./scripts/backup-volumes.sh /volume1/backups/arr-stack-$(date +%Y%m%d)
+./scripts/backup-volumes.sh --tar
 ```
 
-This copies all service configs to a single directory. To restore:
+Creates a ~13MB tarball of essential configs (VPN settings, indexers, request history, etc.).
 
-```bash
-# Example: restore jellyseerr config
-docker run --rm \
-  -v /volume1/backups/arr-stack-20241217/jellyseerr-config:/source:ro \
-  -v arr-stack_jellyseerr-config:/dest \
-  alpine cp -a /source/. /dest/
-```
-
-> **Note:** `traefik/` and `cloudflared/` are in the repo directory, backed up with git.
+See **[Backup & Restore](BACKUP.md)** for full details on what's backed up, restore procedures, and automation.
 
 ---
 
