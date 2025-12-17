@@ -14,7 +14,7 @@ services:
       - "8443:443"  # HTTPS (Ugreen uses port 443, so Traefik uses 8443)
       - "9090:8080" # Traefik Dashboard
     environment:
-      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+      # CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}  # Only needed for Option B (port forwarding with DNS challenge)
       - TZ=${TZ:-Europe/London}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
