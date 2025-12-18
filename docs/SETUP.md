@@ -420,7 +420,7 @@ docker exec gluetun wget -qO- ifconfig.me
 2. **Add Indexers:** Settings → Indexers → Add Indexer
 3. **Add FlareSolverr** (for protected sites):
    - Settings → Indexers → Add FlareSolverr
-   - Host: `http://flaresolverr:8191`
+   - Host: `http://flaresolverr:8191` (or `http://192.168.100.10:8191` if hostname fails)
    - Tag: `flaresolverr`
 4. **Connect to Sonarr:**
    - Settings → Apps → Add → Sonarr
