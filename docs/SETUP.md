@@ -402,6 +402,8 @@ docker exec gluetun wget -qO- ifconfig.me
 
 ## Step 5: Configure Services
 
+> **Hostname vs IP:** When connecting services (e.g., Sonarr → qBittorrent), use the container hostname (e.g., `gluetun`). If hostname resolution fails, use the static IP instead (see [Quick Reference](REFERENCE.md) for IPs).
+
 ### 5.1 qBittorrent
 
 1. **Access:** `http://HOST_IP:8085`
@@ -437,6 +439,7 @@ docker exec gluetun wget -qO- ifconfig.me
    - Settings → Indexers → Add FlareSolverr
    - Host: `http://flaresolverr:8191` (or `http://192.168.100.10:8191` if hostname fails)
    - Tag: `flaresolverr`
+   - **Note:** FlareSolverr doesn't bypass all Cloudflare protections - some indexers may still fail. Non-protected indexers are more reliable.
 4. **Connect to Sonarr:**
    - Settings → Apps → Add → Sonarr
    - Sonarr Server: `http://sonarr:8989`
