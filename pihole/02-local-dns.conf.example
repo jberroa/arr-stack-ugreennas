@@ -1,0 +1,31 @@
+# Local .lan domains for port-free service access
+# Traefik routes by Host header to correct service port
+#
+# Usage (on NAS):
+#   source .env
+#   sed "s/YOUR_NAS_IP/${NAS_IP}/g" pihole/02-local-dns.conf.example > pihole/02-local-dns.conf
+#
+# Then restart Pi-hole: docker compose up -d pihole
+
+# Media services
+address=/jellyfin.lan/YOUR_NAS_IP
+address=/jellyseerr.lan/YOUR_NAS_IP
+
+# *arr stack (VPN-protected)
+address=/sonarr.lan/YOUR_NAS_IP
+address=/radarr.lan/YOUR_NAS_IP
+address=/prowlarr.lan/YOUR_NAS_IP
+address=/bazarr.lan/YOUR_NAS_IP
+
+# Download clients
+address=/qbit.lan/YOUR_NAS_IP
+address=/sabnzbd.lan/YOUR_NAS_IP
+
+# Infrastructure
+address=/traefik.lan/YOUR_NAS_IP
+address=/pihole.lan/YOUR_NAS_IP
+address=/wg.lan/YOUR_NAS_IP
+
+# Utilities
+address=/uptime.lan/YOUR_NAS_IP
+address=/duc.lan/YOUR_NAS_IP

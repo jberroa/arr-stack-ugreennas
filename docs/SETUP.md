@@ -628,6 +628,26 @@ This gives Usenet a 30-minute head start before considering torrents.
 
 ⚠️ **Security:** Admin services are local-only by default, but still recommend enabling authentication on Sonarr, Radarr, Prowlarr, Bazarr, and qBittorrent.
 
+### 5.11 Local DNS (.lan domains) — Optional
+
+Access services without remembering port numbers: `http://sonarr.lan` instead of `http://10.10.0.10:8989`.
+
+**Setup (on NAS via SSH):**
+```bash
+cd /volume1/docker/arr-stack
+
+# Create DNS config from template (uses NAS_IP from .env)
+source .env
+sed "s/YOUR_NAS_IP/${NAS_IP}/g" pihole/02-local-dns.conf.example > pihole/02-local-dns.conf
+
+# Restart Pi-hole to load new config
+docker compose -f docker-compose.arr-stack.yml up -d pihole
+```
+
+**Router DHCP:** Set your router to advertise your NAS IP as DNS server. All devices will then use Pi-hole for DNS, and `.lan` domains will resolve.
+
+See [REFERENCE.md](REFERENCE.md#local-access-lan-domains) for the full list of `.lan` URLs.
+
 ---
 
 ## Step 6: Test

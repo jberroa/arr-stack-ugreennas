@@ -26,6 +26,28 @@
 | Uptime Kuma | 192.168.100.13 | 3001 | Monitoring |
 | duc | — | 8838 | Disk usage (no static IP) |
 
+### Local Access (.lan domains)
+
+Port-free access from any device using Pi-hole DNS:
+
+| URL | Service |
+|-----|---------|
+| `http://jellyfin.lan` | Jellyfin |
+| `http://jellyseerr.lan` | Jellyseerr |
+| `http://sonarr.lan` | Sonarr |
+| `http://radarr.lan` | Radarr |
+| `http://prowlarr.lan` | Prowlarr |
+| `http://bazarr.lan` | Bazarr |
+| `http://qbit.lan` | qBittorrent |
+| `http://sabnzbd.lan` | SABnzbd |
+| `http://traefik.lan` | Traefik Dashboard |
+| `http://pihole.lan/admin` | Pi-hole |
+| `http://wg.lan` | WireGuard |
+| `http://uptime.lan` | Uptime Kuma |
+| `http://duc.lan` | Disk Usage |
+
+> **Setup:** Requires `pihole/02-local-dns.conf` (see Setup guide) and router DHCP pointing to Pi-hole as DNS.
+
 ### Service Connection Guide
 
 **VPN-protected services** (qBittorrent, Sonarr, Radarr, Prowlarr) share Gluetun's network via `network_mode: service:gluetun`. This means:

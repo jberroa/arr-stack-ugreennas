@@ -1,0 +1,146 @@
+# Local .lan domain routing (port-free access)
+#
+# How it works:
+# 1. Pi-hole DNS resolves *.lan → NAS_IP (see pihole/02-local-dns.conf)
+# 2. Browser requests http://sonarr.lan → NAS_IP:8080 (Traefik)
+# 3. Traefik matches Host header → routes to correct service:port
+#
+# Result: http://sonarr.lan instead of http://10.10.0.10:8989
+
+http:
+  routers:
+    # === Media Services ===
+    jellyfin-lan:
+      rule: "Host(`jellyfin.lan`)"
+      entryPoints: [web]
+      service: jellyfin-lan
+
+    jellyseerr-lan:
+      rule: "Host(`jellyseerr.lan`)"
+      entryPoints: [web]
+      service: jellyseerr-lan
+
+    # === *arr Stack (VPN-protected via Gluetun) ===
+    sonarr-lan:
+      rule: "Host(`sonarr.lan`)"
+      entryPoints: [web]
+      service: sonarr-lan
+
+    radarr-lan:
+      rule: "Host(`radarr.lan`)"
+      entryPoints: [web]
+      service: radarr-lan
+
+    prowlarr-lan:
+      rule: "Host(`prowlarr.lan`)"
+      entryPoints: [web]
+      service: prowlarr-lan
+
+    bazarr-lan:
+      rule: "Host(`bazarr.lan`)"
+      entryPoints: [web]
+      service: bazarr-lan
+
+    # === Download Clients ===
+    qbit-lan:
+      rule: "Host(`qbit.lan`)"
+      entryPoints: [web]
+      service: qbit-lan
+
+    sabnzbd-lan:
+      rule: "Host(`sabnzbd.lan`)"
+      entryPoints: [web]
+      service: sabnzbd-lan
+
+    # === Infrastructure ===
+    traefik-lan:
+      rule: "Host(`traefik.lan`)"
+      entryPoints: [web]
+      service: api@internal
+
+    pihole-lan:
+      rule: "Host(`pihole.lan`)"
+      entryPoints: [web]
+      service: pihole-lan
+
+    wg-lan:
+      rule: "Host(`wg.lan`)"
+      entryPoints: [web]
+      service: wg-lan
+
+    # === Utilities ===
+    uptime-lan:
+      rule: "Host(`uptime.lan`)"
+      entryPoints: [web]
+      service: uptime-lan
+
+    duc-lan:
+      rule: "Host(`duc.lan`)"
+      entryPoints: [web]
+      service: duc-lan
+
+  services:
+    # === Media Services ===
+    jellyfin-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.4:8096"
+
+    jellyseerr-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.8:5055"
+
+    # === *arr Stack (via Gluetun at 192.168.100.3) ===
+    sonarr-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.3:8989"
+
+    radarr-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.3:7878"
+
+    prowlarr-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.3:9696"
+
+    bazarr-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.9:6767"
+
+    # === Download Clients (via Gluetun) ===
+    qbit-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.3:8085"
+
+    sabnzbd-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.3:8080"
+
+    # === Infrastructure ===
+    pihole-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.5:80"
+
+    wg-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.6:51821"
+
+    # === Utilities ===
+    uptime-lan:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.100.13:3001"
+
+    duc-lan:
+      loadBalancer:
+        servers:
+          - url: "http://duc:80"

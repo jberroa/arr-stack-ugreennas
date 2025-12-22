@@ -279,6 +279,7 @@ services:
     volumes:
       - pihole-etc-pihole:/etc/pihole
       - pihole-etc-dnsmasq:/etc/dnsmasq.d
+      - ./pihole/02-local-dns.conf:/etc/dnsmasq.d/02-local-dns.conf:ro
     labels:
       # Routing handled by traefik/dynamic/vpn-services.yml (not Docker labels)
       - "traefik.enable=true"
