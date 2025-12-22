@@ -640,8 +640,11 @@ cd /volume1/docker/arr-stack
 source .env
 sed "s/YOUR_NAS_IP/${NAS_IP}/g" pihole/02-local-dns.conf.example > pihole/02-local-dns.conf
 
+# Enable dnsmasq.d configs in Pi-hole v6 (one-time)
+docker exec pihole sed -i 's/etc_dnsmasq_d = false/etc_dnsmasq_d = true/' /etc/pihole/pihole.toml
+
 # Restart Pi-hole to load new config
-docker compose -f docker-compose.arr-stack.yml up -d pihole
+docker compose -f docker-compose.arr-stack.yml restart pihole
 ```
 
 **Router DHCP:** Set your router to advertise your NAS IP as DNS server. All devices will then use Pi-hole for DNS, and `.lan` domains will resolve.
