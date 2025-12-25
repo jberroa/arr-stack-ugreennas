@@ -796,7 +796,7 @@ docker compose -f docker-compose.utilities.yml up -d
 | Service | Description | Access |
 |---------|-------------|--------|
 | **deunhealth** | Auto-restarts services when VPN recovers | Internal |
-| **Uptime Kuma** | Service monitoring dashboard | http://HOST_IP:3001 |
+| **Uptime Kuma** | Service monitoring dashboard | http://uptime.lan |
 | **duc** | Disk usage analyzer (treemap UI) | http://HOST_IP:8838 |
 | **qbit-scheduler** | Pauses torrents overnight for disk spin-down | Internal |
 
