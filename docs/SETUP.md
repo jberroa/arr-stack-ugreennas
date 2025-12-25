@@ -27,20 +27,16 @@ Complete setup guide for the media automation stack. Works on any Docker host wi
 - Storage for media files
 - Support for `/dev/net/tun` (for VPN)
 
-### Software
+### Software & Services
 - Docker Engine 20.10+
 - Docker Compose v2.0+
 - Git (for deployment)
 - SSH access to your host
-
-### Required Services
 - **VPN Subscription** - Any provider supported by [Gluetun](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) (Surfshark, NordVPN, PIA, Mullvad, ProtonVPN, etc.)
+- **Usenet Provider** (optional, ~$4-6/month) - Frugal Usenet, Newshosting, Eweka, etc.
+- **Usenet Indexer** (optional) - NZBGeek (~$12/year) or DrunkenSlug (free tier)
 
-### For Usenet downloads (optional)
-- **Usenet Provider** (~$4-6/month) - Frugal Usenet, Newshosting, Eweka, etc.
-- **Usenet Indexer** - NZBGeek (~$12/year) or DrunkenSlug (free tier)
-
-> **Why Usenet?** More reliable than public torrents (no fakes), faster downloads, SSL-encrypted (no VPN needed). See [SABnzbd setup](#55-sabnzbd-usenet-downloads-optional).
+> **Why Usenet?** More reliable than public torrents (no fakes), faster downloads, SSL-encrypted (no VPN needed). See [SABnzbd setup](#45-sabnzbd-usenet-downloads).
 
 ---
 
