@@ -462,7 +462,7 @@ Manages torrent/Usenet indexers and syncs them to Sonarr/Radarr.
 
 4. **Add FlareSolverr** (for protected torrent sites):
    - Settings → Indexers → Add FlareSolverr
-   - Host: `http://flaresolverr.lan:8191` (or `http://172.20.0.10:8191` if hostname fails)
+   - Host: `http://172.20.0.10:8191`
    - Tag: `flaresolverr`
    - **Note:** FlareSolverr doesn't bypass all Cloudflare protections - some indexers may still fail. Non-protected indexers are more reliable.
 5. **Connect to Sonarr:**

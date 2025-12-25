@@ -68,7 +68,7 @@ All other services are **LAN-only** (not exposed to internet).
 | Radarr | qBittorrent | `localhost:8085` | Same network stack |
 | Prowlarr | Sonarr | `localhost:8989` | Same network stack |
 | Prowlarr | Radarr | `localhost:7878` | Same network stack |
-| Prowlarr | FlareSolverr | `flaresolverr.lan:8191` | Via Pi-hole DNS |
+| Prowlarr | FlareSolverr | `http://172.20.0.10:8191` | Direct IP (outside gluetun) |
 | Jellyseerr | Sonarr | `gluetun:8989` | Must go through gluetun |
 | Jellyseerr | Radarr | `gluetun:7878` | Must go through gluetun |
 | Jellyseerr | Jellyfin | `jellyfin:8096` | Both have own IPs |
