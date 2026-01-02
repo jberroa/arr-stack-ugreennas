@@ -45,7 +45,7 @@ Watch: Jellyfin — locally or remotely via Traefik
 
 ## Get Started
 
-**[Setup Guide →](docs/SETUP.md)** · [Changelog](CHANGELOG.md)
+**[Setup Guide →](docs/SETUP.md)**
 
 ## Support
 
