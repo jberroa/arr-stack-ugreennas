@@ -4,7 +4,7 @@ Complete setup guide for the media automation stack. Works on any Docker host wi
 
 ## Table of Contents
 
-- [Prerequisites](#prerequisites)
+- [Requirements](#requirements)
 - [Choose Your Setup](#choose-your-setup) ← Start here
 - [Stack Overview](#stack-overview)
 - [Step 1: Create Directories](#step-1-create-directories-and-clonefork-repository)
@@ -30,7 +30,7 @@ Complete setup guide for the media automation stack. Works on any Docker host wi
 
 ---
 
-## Prerequisites
+## Requirements
 
 ### Hardware
 - Docker host (NAS, server, Raspberry Pi 4+, etc.)
