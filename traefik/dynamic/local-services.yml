@@ -22,6 +22,12 @@ http:
       entryPoints: [web]
       service: jellyseerr-lan
 
+    # Typo aliases (jellyseer/overseer -> jellyseerr/overseerr)
+    jellyseer-lan:
+      rule: "Host(`jellyseer.lan`)"
+      entryPoints: [web]
+      service: jellyseerr-lan
+
     # === *arr Stack (VPN-protected via Gluetun) ===
     sonarr-lan:
       rule: "Host(`sonarr.lan`)"
