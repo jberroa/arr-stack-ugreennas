@@ -45,7 +45,7 @@ Complete setup guide for the media automation stack. Works on any Docker host wi
 - SSH access to your host
 - **VPN Subscription** - Any provider supported by [Gluetun](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) (Surfshark, NordVPN, PIA, Mullvad, ProtonVPN, etc.)
 
-> **Already using Tailscale?** Skip the WireGuard component - both do the same thing (remote access to your home network). Gluetun is separate (protects download traffic).
+> **Already using Tailscale?** Skip the WireGuard component - both serve the same purpose here (remote access to your home network). Gluetun is separate (protects download traffic).
 
 - **Usenet Provider** (optional, ~$4-6/month) - Frugal Usenet, Newshosting, Eweka, etc.
 - **Usenet Indexer** (optional) - NZBGeek (~$12/year) or DrunkenSlug (free tier)
