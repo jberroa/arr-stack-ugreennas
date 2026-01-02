@@ -593,8 +593,14 @@ Lets users browse and request movies/TV shows.
    - Jellyfin URL: `http://jellyfin:8096`
    - Enter Jellyfin credentials
 3. **Configure Services:**
-   - Settings → Services → Add Sonarr: `http://gluetun:8989` (Sonarr runs via gluetun)
-   - Settings → Services → Add Radarr: `http://gluetun:7878` (Radarr runs via gluetun)
+   - Settings → Services → Add Radarr:
+     - **Hostname:** `gluetun` (internal Docker hostname)
+     - **Port:** `7878`
+     - **External URL:** `http://radarr.lan` (or `http://HOST_IP:7878`) — makes "Open in Radarr" links work in your browser
+   - Settings → Services → Add Sonarr:
+     - **Hostname:** `gluetun`
+     - **Port:** `8989`
+     - **External URL:** `http://sonarr.lan` (or `http://HOST_IP:8989`)
 
 ### 4.8 Bazarr (Subtitles)
 
