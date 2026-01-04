@@ -348,7 +348,7 @@ openssl rand -base64 24
 ```
 Edit `.env`: `PIHOLE_UI_PASS=your_password`
 
-**WireGuard Password Hash** (for remote VPN access — + remote access only):
+**For + remote access: WireGuard Password Hash**
 
 > **Note:** WireGuard uses `wg.${DOMAIN}` as its hostname. You need the + remote access setup (with DOMAIN configured) for WireGuard to work.
 
@@ -361,7 +361,7 @@ Copy the `$2a$12$...` hash output and add to `.env`:
 WG_PASSWORD_HASH=$2a$12$your_generated_hash
 ```
 
-**Traefik Dashboard Auth** (if using external access):
+**For + remote access: Traefik Dashboard Auth**
 
 Invent a password for the Traefik dashboard and note it down, then generate the auth string:
 ```bash
@@ -563,7 +563,7 @@ Manages torrent/Usenet indexers and syncs them to Sonarr/Radarr.
 
 1. **Access:** `http://HOST_IP:9696`
 2. **Add Torrent Indexers:** Indexers (left sidebar) → + button → search by name
-3. **Add Usenet Indexer** (if using SABnzbd):
+3. **If using SABnzbd: Add Usenet Indexer**
    - **Indexers** (left sidebar, NOT Settings → Indexer Proxies) → + button
    - Search by indexer name (e.g., "NZBGeek", "DrunkenSlug", "NZBFinder")
    - API Key: (from your indexer account → API section)
