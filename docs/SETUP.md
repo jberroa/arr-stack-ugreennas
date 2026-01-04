@@ -253,7 +253,7 @@ sudo chmod 600 /path/to/arr-stack/traefik/acme.json
             └── config.yml
 ```
 
-> **Note:** Service data (Sonarr, Radarr, Jellyfin, etc.) is stored in Docker named volumes, automatically managed by Docker. Only `traefik/` and `cloudflared/` are local directories for user-edited configuration.
+> Only `traefik/` and `cloudflared/` appear as folders on your NAS. Everything else is managed by Docker internally.
 
 ---
 
