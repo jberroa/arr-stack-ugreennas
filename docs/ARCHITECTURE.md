@@ -125,16 +125,7 @@ arr-stack network (172.20.0.0/24)
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Docker Compose Files
-
-| File | Purpose | Required for |
-|------|---------|--------------|
-| `docker-compose.arr-stack.yml` | Core media stack + VPN | Core |
-| `docker-compose.traefik.yml` | Reverse proxy for .lan and external access | + local DNS |
-| `docker-compose.cloudflared.yml` | Tunnel to Cloudflare | + remote access |
-| `docker-compose.utilities.yml` | Monitoring, disk usage, auto-recovery | Optional |
-
-## Why This Design?
+## Design Decisions
 
 **Static IPs:** Prevents "container not found" errors after restarts. Services always know where to find each other.
 

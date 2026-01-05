@@ -621,18 +621,11 @@ This gives Usenet a 30-minute head start before considering torrents.
 
 ### 4.10 Pi-hole (DNS)
 
-**Why Pi-hole in this stack?**
-- **DNS for VPN-routed services** — Prowlarr, Sonarr, Radarr etc. use Gluetun's network and need Pi-hole to resolve local hostnames
-- **Optional .lan domains** — access services via `http://sonarr.lan` instead of `http://NAS_IP:8989`
-- **Optional network-wide DNS** — set your router to use Pi-hole for all devices (ad-blocking bonus)
-
-**Setup:**
-
 1. **Access:** `http://NAS_IP:8081/admin`
 2. **Login:** Use password from `PIHOLE_UI_PASS` (password only, no username)
-3. **Upstream DNS:** Settings → DNS → pick upstream servers (1.1.1.1, 8.8.8.8, etc.). Pi-hole forwards queries there. Note: your upstream provider sees all non-blocked queries.
+3. **Upstream DNS:** Settings → DNS → pick upstream servers (1.1.1.1, 8.8.8.8, etc.)
 
-**Optional: Network-wide DNS.** Set your router's DHCP DNS to your NAS IP.
+**Optional:** Set your router's DHCP DNS to your NAS IP for network-wide ad-blocking.
 
 ---
 
@@ -941,9 +934,9 @@ docker logs qbit-scheduler
 
 ---
 
-## Adding More Services
+## Adding More Services (Core)
 
-The *arr ecosystem includes other apps you can add using the same pattern:
+Other *arr apps you can add to your Core stack:
 
 - **Lidarr** - Music (port 8686)
 - **Readarr** - Ebooks (port 8787)
