@@ -194,6 +194,23 @@ The last two checks require SSH access to your NAS. They gracefully skip when:
 
 3. **Alternative: password auth** via `NAS_SSH_PASS` env var (requires `sshpass` installed)
 
+## Releases
+
+**Force-pushing a tag resets the GitHub release to Draft status.** After moving a tag to a new commit:
+
+```bash
+# Move tag to new commit
+git tag -d v1.x && git tag v1.x
+git push origin :refs/tags/v1.x && git push origin v1.x
+
+# REQUIRED: Fix the release status (force-push sets it to Draft)
+gh release edit v1.x --draft=false --latest
+```
+
+Without the `gh release edit` step, the release stays Draft and won't show as Latest.
+
+---
+
 ## Scripts Structure
 
 ```

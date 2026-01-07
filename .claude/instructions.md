@@ -359,10 +359,16 @@ When creating release notes:
 - Keep notes concise - bullet points, not paragraphs
 - Don't mention Reddit/community feedback as motivation for changes
 
-When updating a release tag to a new commit:
-1. Delete the GitHub release first: `gh release delete v1.x`
-2. Delete and recreate the tag: `git tag -d v1.x && git tag v1.x`
-3. Push tag: `git push origin :refs/tags/v1.x && git push origin v1.x`
-4. Create new release: `gh release create v1.x --title "..." --notes "..."`
+**⚠️ CRITICAL: Force-pushing a tag resets the GitHub release to Draft status.**
 
-**Never** just move the tag - this orphans the release and breaks the GitHub UI.
+When updating a release tag to a new commit:
+```bash
+# Move tag to new commit
+git tag -d v1.x && git tag v1.x
+git push origin :refs/tags/v1.x && git push origin v1.x
+
+# REQUIRED: Fix the release status (force-push sets it to Draft)
+gh release edit v1.x --draft=false --latest
+```
+
+**Always run `gh release edit` after force-pushing a tag.** Without it, the release stays Draft and won't show as Latest.
