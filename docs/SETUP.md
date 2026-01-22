@@ -811,7 +811,7 @@ Issues? [Report on GitHub](https://github.com/Pharkie/arr-stack-ugreennas/issues
 
 ## + remote access — Optional
 
-Watch your media from anywhere: `jellyfin.yourdomain.com` instead of only on your home network.
+Watch and request media from anywhere via `jellyfin.yourdomain.com` and `jellyseerr.yourdomain.com`.
 
 **Requirements:**
 - Buy a new, external domain name (~$10/year) — [Cloudflare Registrar](https://www.cloudflare.com/products/registrar/) is simplest
