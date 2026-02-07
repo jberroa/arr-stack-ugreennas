@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Documentation
 - **SABnzbd troubleshooting guide**: Step-by-step fix for stuck unpack loops (obfuscated filenames + par2 files, no RARs). Covers diagnosis, `_UNPACK_*` cleanup, postproc queue reset, and Radarr re-import.
 - **Beszel webhook setup**: How to configure Beszel alert webhooks for Discord/ntfy notifications, plus UGOS antivirus scanning tip
+- **Fix Gluetun VPN check command**: Changed `grep -i "connected"` to `grep "Public IP"` — Gluetun (WireGuard) never logs "connected", it logs the public IP on successful connection
 
 ---
 

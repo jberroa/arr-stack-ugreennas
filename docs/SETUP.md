@@ -385,8 +385,8 @@ docker compose -f docker-compose.arr-stack.yml up -d
 # Check all containers are running
 docker ps
 
-# Check VPN connection
-docker logs gluetun | grep -i "connected"
+# Check VPN connection (should show a VPN IP and location)
+docker logs gluetun | grep "Public IP"
 
 # Verify VPN IP (should NOT be your home IP)
 docker exec gluetun wget -qO- ifconfig.me
