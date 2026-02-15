@@ -21,6 +21,9 @@ traefik/dynamic/*.local.yml
 # Pi-hole Local DNS (copy from .example and customize)
 pihole/02-local-dns.conf
 
+# Recyclarr config (contains API keys - create directly on NAS)
+recyclarr/recyclarr.yml
+
 # Cloudflared Credentials (locally-managed tunnel)
 cloudflared/config.yml
 cloudflared/credentials.json

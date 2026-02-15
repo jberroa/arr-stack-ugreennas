@@ -167,6 +167,27 @@ services:
       start_period: 10s
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # RECYCLARR - Syncs Trash Guide quality profiles to Sonarr & Radarr.
+  # No web UI. Runs on a schedule (default: daily at 3am).
+  # Config: ./recyclarr/recyclarr.yml
+  # Logs: docker logs recyclarr
+  # Manual sync: docker exec recyclarr recyclarr sync
+  # ═══════════════════════════════════════════════════════════════════════════
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr:7
+    container_name: recyclarr
+    networks:
+      arr-stack:
+        ipv4_address: 172.20.0.17
+    volumes:
+      - ./recyclarr:/config
+    environment:
+      - TZ=${TZ}
+      - RECYCLARR_CREATE_CONFIG=false
+    restart: always
+    logging: *default-logging
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # DIUN - Docker Image Update Notifier. Watches running containers and sends
   # webhook notifications when newer image versions are available on registries.
   # No web UI. Configure DIUN_WEBHOOK_URL in .env to receive alerts.
