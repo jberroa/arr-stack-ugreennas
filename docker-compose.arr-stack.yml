@@ -35,6 +35,7 @@ networks:
         - subnet: 10.8.1.0/24
   arr-stack:
     name: arr-stack
+    external: true
     driver: bridge
     ipam:
       config:
@@ -103,6 +104,7 @@ services:
       - SERVER_COUNTRIES=${VPN_COUNTRIES}
       - TZ=${TZ}
       - DNS_ADDRESS=172.20.0.5
+      - HEALTH_TARGET_ADDRESS=1.1.1.1:443
       - FIREWALL_OUTBOUND_SUBNETS=${LAN_SUBNET},172.20.0.0/24,10.8.1.0/24
     ports:
       # Ports for services using network_mode: "service:gluetun"
