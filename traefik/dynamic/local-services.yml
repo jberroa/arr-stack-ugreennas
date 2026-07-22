@@ -17,6 +17,11 @@ http:
       entryPoints: [web]
       service: jellyfin-lan
 
+    abs-lan:
+      rule: "Host(`abs.lan`)"
+      entryPoints: [web]
+      service: abs-lan
+
     seerr-lan:
       rule: "Host(`seerr.lan`)"
       entryPoints: [web]
@@ -35,7 +40,12 @@ http:
       middlewares: [jellyseerr-redirect]
       service: seerr-lan
 
-    # === *arr Stack (VPN-protected via Gluetun) ===
+    # === *arr Stack ===
+    readarr-lan:
+      rule: "Host(`readarr.lan`)"
+      entryPoints: [web]
+      service: readarr-lan
+
     sonarr-lan:
       rule: "Host(`sonarr.lan`)"
       entryPoints: [web]
@@ -108,10 +118,20 @@ http:
         servers:
           - url: "http://172.20.0.4:8096"
 
+    abs-lan:
+      loadBalancer:
+        servers:
+          - url: "http://172.20.0.18:13378"
+
     seerr-lan:
       loadBalancer:
         servers:
           - url: "http://172.20.0.8:5055"
+
+    readarr-lan:
+      loadBalancer:
+        servers:
+          - url: "http://172.20.0.19:8787"
 
     # === *arr Stack ===
     # Sonarr/Radarr now run on the arr-stack bridge with their own IPs

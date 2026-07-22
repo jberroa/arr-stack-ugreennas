@@ -23,6 +23,9 @@ volumes:
   bazarr-config:
   dnscrypt-config:
   pihole-etc-pihole:
+  readarr-config:
+  audiobookshelf-config:
+  audiobookshelf-metadata:
 
 #########################
 # Networks              #
@@ -294,6 +297,73 @@ services:
       timeout: 15s
       retries: 3
       start_period: 60s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # READARR - Audiobook monitor. Searches for audiobooks via Prowlarr and sends
+  # them to SABnzbd/qBittorrent. Like Sonarr but for books/audiobooks.
+  # Access: readarr.lan | NAS_IP:8787
+  # Runs on the arr-stack bridge (own IP 172.20.0.17), NOT behind the VPN —
+  # same rationale as Sonarr/Radarr: only talks to metadata APIs + internal
+  # services, never to indexers/peers directly.
+  # ═══════════════════════════════════════════════════════════════════════════
+  readarr:
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: readarr
+    <<: *lsio-security
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    ports:
+      - "8787:8787"
+    networks:
+      arr-stack:
+        ipv4_address: 172.20.0.19
+    volumes:
+      - readarr-config:/config
+      - ${MEDIA_ROOT}:/data
+    labels:
+      - deunhealth.restart.on.unhealthy=true
+    restart: always
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8787/"]
+      interval: 2m
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # AUDIOBOOKSHELF - Audiobook server and player. Streams your audiobook
+  # library with progress tracking, chapters, and iOS/Android apps.
+  # Access: abs.lan | NAS_IP:13378
+  # ═══════════════════════════════════════════════════════════════════════════
+  audiobookshelf:
+    image: ghcr.io/advplyr/audiobookshelf:2.20.0
+    container_name: audiobookshelf
+    <<: *default-security
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+    environment:
+      - TZ=${TZ}
+    ports:
+      - "13378:13378"
+    networks:
+      arr-stack:
+        ipv4_address: 172.20.0.18
+    volumes:
+      - audiobookshelf-config:/config
+      - audiobookshelf-metadata:/metadata
+      - ${MEDIA_ROOT}/media/audiobooks:/audiobooks
+    restart: always
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13378/healthcheck"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # ═══════════════════════════════════════════════════════════════════════════
   # JELLYFIN - Media server. Stream your movies and TV shows like Netflix.
