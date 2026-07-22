@@ -348,7 +348,7 @@ services:
     environment:
       - TZ=${TZ}
     ports:
-      - "13378:13378"
+      - "13378:80"
     networks:
       arr-stack:
         ipv4_address: 172.20.0.18
@@ -359,7 +359,7 @@ services:
     restart: always
     logging: *default-logging
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13378/healthcheck"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/healthcheck"]
       interval: 2m
       timeout: 10s
       retries: 3
