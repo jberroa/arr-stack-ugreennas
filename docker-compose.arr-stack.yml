@@ -339,7 +339,7 @@ services:
   # Access: abs.lan | NAS_IP:13378
   # ═══════════════════════════════════════════════════════════════════════════
   audiobookshelf:
-    image: ghcr.io/advplyr/audiobookshelf:2.20.0
+    image: ghcr.io/advplyr/audiobookshelf:latest
     container_name: audiobookshelf
     <<: *default-security
     cap_add:
