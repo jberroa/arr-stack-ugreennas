@@ -143,6 +143,48 @@ docker exec prowlarr wget -qO- http://127.0.0.1:8191/    # flaresolverr -> "read
 docker restart qbittorrent sabnzbd prowlarr flaresolverr   # or whichever started before gluetun
 ```
 
+## NEVER Use `--remove-orphans` (Multi-Compose-File Project)
+
+This stack splits its services across several compose files (`docker-compose.arr-stack.yml`, `docker-compose.utilities.yml`, `docker-compose.traefik.yml`, …) that share **one project directory and project name**. To compose, any running container of the project that is not defined in the file you passed with `-f` is an *orphan*. So:
+
+```bash
+# DO NOT DO THIS — it deletes every container from the OTHER compose files:
+docker compose -f docker-compose.arr-stack.yml up -d --remove-orphans
+```
+
+This happened for real on 2026-08-01 (~20:30 BST): a single `--remove-orphans` run removed **traefik, camera-listen, cloudflared, diun, uptime-kuma, beszel, beszel-agent, gluetun-recover, deunhealth, duc and configarr** in one stroke. Volumes and configs survived (downtime only), and everything had to be restored file by file.
+
+The same split has a second face: **recreate a service only via the file that defines it.** Attachments and settings that live in one file are silently dropped if the container is ever brought up through another path — e.g. traefik's `traefik-lan` macvlan (its `10.10.0.11` LAN presence) exists only in `docker-compose.traefik.yml`; a traefik container created without that file comes up bridge-only and **every `.lan` URL dies while the container still reports healthy** (also observed 2026-08-01).
+
+If you actually need to prune an orphan, remove that one container by name with `docker rm`.
+
+### After a Gluetun RECREATE (not just a restart), `docker restart` cannot save you
+
+Everything above assumes gluetun was **restarted** — same container, same ID. If gluetun is **recreated** (its config in the compose file drifted, so *any* `docker compose up -d`, even of an unrelated service like seerr, replaces it), the dependents' `network_mode: "service:gluetun"` still points at the **old container ID**. They are SIGKILLed (exit 137), and now `docker restart` — whether run by you or by `gluetun-recover` — fails with:
+
+```
+Error response from daemon: ... joining network namespace of container <old-id>: No such container
+```
+
+`gluetun-recover` logs this failure loudly but **cannot fix it** (it would need to run compose, which it can't). The only fix is a compose-level recreate of the dependents so they bind to the new gluetun container:
+
+```bash
+cd /volume1/docker/arr-stack
+docker compose -f docker-compose.arr-stack.yml up -d qbittorrent sabnzbd prowlarr flaresolverr
+```
+
+**If that compose command hangs:** a dependent that died mid-netns-join can land in a `Dead` state that dockerd can never remove (`docker rm -f` → "removal of container is already in progress", forever). Compose then wedges trying to replace it, or leaves the replacement under a hash-prefixed name (`<id>_flaresolverr`). The only cure is a Docker daemon restart, which also clears the Dead container (observed 2026-08-01 with flaresolverr; check nobody is streaming first):
+
+```bash
+sudo systemctl restart docker    # bounces the whole stack; ~2-3 min to settle
+```
+
+**Prevention:** before any `docker compose up -d <service>` on the arr-stack file, check whether gluetun would be recreated too, and plan for the dependents:
+
+```bash
+docker compose -f docker-compose.arr-stack.yml up -d --dry-run <service> 2>&1 | grep -i recreate
+```
+
 ## SABnzbd: Stuck Unpack Loop
 
 **Symptom:** Radarr shows "Downloading" at 100% with 0 B file size. SABnzbd UI is unresponsive or Save fails. Logs show `Unpacked files []` repeatedly.
