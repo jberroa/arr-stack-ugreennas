@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.25] - 2026-08-05
+
+### Fixed
+- **Docker no longer leaves host-IP-pinned ports unpublished after a reboot** — the fault that took the entire home network's DNS down on 2026-08-05. At boot the Docker *daemon* restores `restart: always` containers itself (compose is never involved), and bindings pinned to `${NAS_IP}` silently fail to be established while the container starts anyway. Reproduced on three consecutive reboots: **pihole, baserow and therapybot — the only three `${NAS_IP}`-pinned containers — failed every time; all 13 wildcard-bound containers were unaffected.** One failed binding drops the container's whole mapping set, so Pi-hole also lost its `0.0.0.0:8081` UI. Pi-hole reported **healthy** throughout, because its healthcheck digs `127.0.0.1` from *inside* the container — so `docker ps`, health status and `deunhealth` were all blind to it. Fixed by `scripts/boot-compose-up.sh`, run at boot via `scripts/boot-compose-up.service`, which runs `docker compose up -d` across all nine deployed stacks and re-establishes the bindings. DNS is back ~20s after boot (Pi-hole's stack is ordered first); the full sweep takes ~5 minutes.
+
+### Added
+- **`scripts/boot-compose-up.sh` + `scripts/boot-compose-up.service`**, deployed to `/volume1/docker/boot-compose-up.sh` (symlinked into this repo so `git pull` updates it) and `/etc/systemd/system/`. The script waits for dockerd to accept connections before doing anything, brings each stack up independently so one failure can't block the rest (DNS matters more than Immich), logs to `/volume1/docker/boot-compose-up.log` with self-trimming, and deliberately never passes `--remove-orphans` (see the existing TROUBLESHOOTING entry — it would delete the other compose files' containers).
+
+### Documentation
+- **TROUBLESHOOTING.md "Docker: Ports Not Published After Reboot"**: the full incident, and how it differs from the neighbouring exit-128 Pi-hole entry — there the container is *stopped*; here it is *running and answering nobody*, which is much harder to spot. Three things learned the hard way and now written down: (1) the systemd unit must use `Wants=`, never `Requires=`/`RequiresMountsFor=` — the first version failed the job nine seconds into boot because `/volume1` wasn't mounted yet and **never retried**, leaving it `inactive (dead)` with nothing in `systemctl status`; (2) a **static IP does not fix this**, unlike the exit-128 case — UGOS reverts the Control Panel setting to DHCP on reboot and overrides `ifcfg-eth0` (which has said `static` since February) via its own `dhclient@eth0.service`; (3) `mooseadmin` must be in the `systemd-journal` group or `journalctl` returns nothing in a way that reads as "no logs" rather than "no permission".
+
+## [1.7.24] - 2026-08-01
+
+### Changed
+- **Seerr** v3.3.0 → v3.4.1. The bump was made live on the NAS first (config volume backed up to `seerr-config-backup-20260801-202225.tgz` beforehand); this release absorbs it into the repo. Verified on the NAS: container healthy, `/api/v1/status` reports 3.4.1, and Seerr reaches qBittorrent through `gluetun:8085`.
+- **Diun now notifies about new release tags, not just digest changes of the pinned tag**: added `DIUN_DEFAULTS_WATCHREPO=true` plus a semver-only `DIUN_DEFAULTS_INCLUDETAGS=^v?\d+\.\d+\.\d+$` filter (nightlies/betas/rc tags stay silent), capped at the 25 highest tags per repo (`SORTTAGS=semver` + `MAXTAGS=25`) so daily scans don't hammer registries. Without `watchRepo`, diun only reported when e.g. `:v3.3.0` itself was re-pushed — which is why the Seerr v3.4.x releases were never noticed. Deployment gotcha (verified in diun's source — `db.First()` tracks "first check" per *repo*, not per tag): enabling `watchRepo` against an existing diun DB fires a notification for every historical tag it hasn't seen, several hundred across the stack. The DB was moved aside (`diun.db.pre-watchrepo`) so the first scan primed silently; only genuinely new releases notify from now on.
+
+### Fixed
+- **`gluetun-recover` no longer fails silently after a gluetun RECREATE**: `docker restart` of a dependent only works when gluetun was *restarted* (same container ID). When gluetun is *recreated* — which any `docker compose up -d`, even of an unrelated service, will do if gluetun's config has drifted — the dependents still point at the old container ID and restart fails with "joining network namespace … No such container". The watcher now logs that failure loudly, including the exact `docker compose up -d --force-recreate <service>` command to run. (It cannot self-heal this case: fixing it requires compose, which the watcher doesn't have.)
+
+### Documentation
+- **TROUBLESHOOTING.md "After a Gluetun RECREATE"**: documents the 2026-08-01 incident — `docker compose up -d seerr` recreated gluetun (config drift), SIGKILLing qBittorrent/SABnzbd/Prowlarr/FlareSolverr (exit 137); `gluetun-recover` and plain `docker restart` both failed on the stale container ID; FlareSolverr then wedged in a `Dead` state dockerd could never remove ("removal of container is already in progress"), which blocked compose and required a Docker daemon restart to clear. Includes the compose-recreate fix, the daemon-restart escape hatch, and a `--dry-run` check to spot an imminent gluetun recreate before it bites.
+
 ## [1.7.23] - 2026-06-27
 
 ### Changed
