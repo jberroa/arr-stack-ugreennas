@@ -94,6 +94,9 @@ services:
         condition: service_healthy  # Wait for Pi-hole DNS before VPN connects
     cap_add:
       - NET_ADMIN
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETUID
     devices:
       - /dev/net/tun:/dev/net/tun
     volumes:
@@ -102,6 +105,8 @@ services:
       # VPN Configuration - see .env.example for provider-specific setup
       - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER}
       - VPN_TYPE=${VPN_TYPE}
+      - OPENVPN_USER=${OPENVPN_USER}
+      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD}
       - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
       - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
       - SERVER_COUNTRIES=${VPN_COUNTRIES}
@@ -123,6 +128,8 @@ services:
         ipv4_address: 172.20.0.3
       vpn-net:
     restart: always
+    labels:
+      - deunhealth.restart.on.unhealthy=true
     logging: *default-logging
     healthcheck:
       test: ["CMD", "/gluetun-entrypoint", "healthcheck"]
