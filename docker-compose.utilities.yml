@@ -256,24 +256,28 @@ services:
       start_period: 10s
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # RECYCLARR - Syncs Trash Guide quality profiles to Sonarr & Radarr.
-  # No web UI. Runs on a schedule (default: daily at 3am).
-  # Config: ./recyclarr/recyclarr.yml
-  # Logs: docker logs recyclarr
-  # Manual sync: docker exec recyclarr recyclarr sync
+  # CONFIGARR - Syncs TRaSH Guides quality profiles and custom formats to
+  # Sonarr/Radarr. One-shot job: runs once and exits. No web UI.
+  # Run manually: docker compose -f docker-compose.utilities.yml run --rm configarr
+  # Dry run first: docker compose -f docker-compose.utilities.yml run --rm -e DRY_RUN=true configarr
   # ═══════════════════════════════════════════════════════════════════════════
-  recyclarr:
-    image: ghcr.io/recyclarr/recyclarr:7
-    container_name: recyclarr
+  configarr:
+    image: ghcr.io/raydak-labs/configarr:1.24.0
+    container_name: configarr
+    <<: *default-security
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+    restart: "no"
     networks:
-      arr-stack:
-        ipv4_address: 172.20.0.17
+      - arr-stack
     volumes:
-      - ./recyclarr:/config
+      - ./configarr/config.yml:/app/config/config.yml:ro
+      - configarr-repos:/app/repos
     environment:
       - TZ=${TZ}
-      - RECYCLARR_CREATE_CONFIG=false
-    restart: always
+      - SONARR_API_KEY=${SONARR_API_KEY}
+      - RADARR_API_KEY=${RADARR_API_KEY}
     logging: *default-logging
 
   # ═══════════════════════════════════════════════════════════════════════════
@@ -325,27 +329,3 @@ services:
       - DIUN_NOTIF_WEBHOOK_HEADERS_0_VALUE=application/json
     logging: *default-logging
 
-  # ═══════════════════════════════════════════════════════════════════════════
-  # CONFIGARR - Syncs TRaSH Guides quality profiles and custom formats to
-  # Sonarr/Radarr. One-shot job: runs once and exits. No web UI.
-  # Run manually: docker compose -f docker-compose.utilities.yml run --rm configarr
-  # Dry run first: docker compose -f docker-compose.utilities.yml run --rm -e DRY_RUN=true configarr
-  # ═══════════════════════════════════════════════════════════════════════════
-  configarr:
-    image: ghcr.io/raydak-labs/configarr:1.24.0
-    container_name: configarr
-    <<: *default-security
-    cap_add:
-      - CHOWN           # Create repo dirs on first run
-      - DAC_OVERRIDE    # Write to root-owned volume directories
-    restart: "no"
-    networks:
-      - arr-stack
-    volumes:
-      - ./configarr/config.yml:/app/config/config.yml:ro
-      - configarr-repos:/app/repos
-    environment:
-      - TZ=${TZ}
-      - SONARR_API_KEY=${SONARR_API_KEY}
-      - RADARR_API_KEY=${RADARR_API_KEY}
-    logging: *default-logging
