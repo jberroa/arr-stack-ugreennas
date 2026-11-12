@@ -143,7 +143,7 @@ services:
   # Access: qbit.lan | qbit.yourdomain.com | NAS_IP:8085
   # ═══════════════════════════════════════════════════════════════════════════
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:5.1.4
+    image: lscr.io/linuxserver/qbittorrent:5.3.0
     container_name: qbittorrent
     <<: *lsio-security
     network_mode: "service:gluetun"
@@ -214,7 +214,7 @@ services:
   # It reaches the VPN-side download clients via the `gluetun` hostname.
   # ═══════════════════════════════════════════════════════════════════════════
   sonarr:
-    image: lscr.io/linuxserver/sonarr:4.0.17
+    image: lscr.io/linuxserver/sonarr:4.0.20
     container_name: sonarr
     <<: *lsio-security
     environment:
@@ -245,7 +245,7 @@ services:
   # Access: prowlarr.lan | prowlarr.yourdomain.com | NAS_IP:9696
   # ═══════════════════════════════════════════════════════════════════════════
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:2.3.0
+    image: lscr.io/linuxserver/prowlarr:2.7.0
     container_name: prowlarr
     <<: *lsio-security
     network_mode: "service:gluetun"
@@ -279,7 +279,7 @@ services:
   # `gluetun` hostname.
   # ═══════════════════════════════════════════════════════════════════════════
   radarr:
-    image: lscr.io/linuxserver/radarr:6.1.1
+    image: lscr.io/linuxserver/radarr:6.4.4
     container_name: radarr
     <<: *lsio-security
     environment:
@@ -416,7 +416,7 @@ services:
   # Protocols: DoH (DNS over HTTPS), DNSCrypt, Anonymized DNS
   # ═══════════════════════════════════════════════════════════════════════════
   dnscrypt-proxy:
-    image: klutchell/dnscrypt-proxy:2.1.16
+    image: klutchell/dnscrypt-proxy:2.1.20
     container_name: dnscrypt-proxy
     cap_drop:
       - ALL
@@ -445,7 +445,7 @@ services:
   # Configure upstream DNS: Settings → DNS → Custom = 172.20.0.6#5053
   # ═══════════════════════════════════════════════════════════════════════════
   pihole:
-    image: pihole/pihole:2026.07.2
+    image: pihole/pihole:2026.10.1
     container_name: pihole
     depends_on:
       dnscrypt-proxy:
@@ -492,17 +492,13 @@ services:
   # Access: seerr.lan | seerr.yourdomain.com | NAS_IP:5055
   # ═══════════════════════════════════════════════════════════════════════════
   seerr:
-    image: ghcr.io/seerr-team/seerr:v3.4.1
+    image: ghcr.io/seerr-team/seerr:v3.5.1
     init: true
     container_name: seerr
+    # No cap_add: the image runs as node (UID 1000), and a non-root process
+    # gets no effective capabilities from cap_add. Docker copies the image's
+    # node-owned /app/config into a new volume, so Seerr can write it anyway.
     <<: *default-security
-    cap_add:
-      - CHOWN           # Create config subdirs on first run
-      - DAC_OVERRIDE    # Write to root-owned volume directories
-    depends_on:
-      gluetun:
-        condition: service_healthy  # Needs gluetun to reach Sonarr/Radarr
-        restart: true
     ports:
       - "5055:5055"
     environment:
@@ -514,6 +510,10 @@ services:
         ipv4_address: 172.20.0.8
     volumes:
       - seerr-config:/app/config
+    # Seerr ships /app/config/DOCKER so a missing volume mount gets noticed,
+    # but Docker copies image contents into a new named volume, marker included,
+    # so every fresh install shows the warning. Delete the marker on start.
+    command: ["sh", "-c", "rm -f /app/config/DOCKER && exec npm start"]
     restart: always
     logging: *default-logging
     healthcheck:
@@ -528,13 +528,9 @@ services:
   # Access: bazarr.lan | bazarr.yourdomain.com | NAS_IP:6767
   # ═══════════════════════════════════════════════════════════════════════════
   bazarr:
-    image: lscr.io/linuxserver/bazarr:1.5.6
+    image: lscr.io/linuxserver/bazarr:1.6.2
     container_name: bazarr
     <<: *lsio-security
-    depends_on:
-      gluetun:
-        condition: service_healthy  # Needs gluetun to reach Sonarr/Radarr
-        restart: true
     ports:
       - "6767:6767"
     environment:
@@ -562,7 +558,7 @@ services:
   # No web UI. Used internally by Prowlarr at localhost:8191
   # ═══════════════════════════════════════════════════════════════════════════
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:v3.4.6
+    image: ghcr.io/flaresolverr/flaresolverr:v3.5.2
     container_name: flaresolverr
     <<: *default-security
     network_mode: "service:gluetun"
