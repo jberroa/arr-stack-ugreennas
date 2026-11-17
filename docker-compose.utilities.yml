@@ -134,6 +134,28 @@ services:
             fi
           done
         }
+        # Background: poll gluetun logs every 30s for AUTH_FAILED loops and
+        # restart gluetun to force a different server. Throttled to once per
+        # 120s so a persistently bad account can't cause a restart storm.
+        # When gluetun comes back healthy the events loop below calls recover()
+        # to revive the dependents — no extra logic needed here.
+        (
+          LAST_RESTART_FILE=/tmp/gluetun_auth_restart_ts
+          echo 0 > "$$LAST_RESTART_FILE"
+          while true; do
+            sleep 30
+            if docker logs gluetun --since 60s 2>&1 | grep -q "AUTH_FAILED"; then
+              now=$$(date +%s)
+              last=$$(cat "$$LAST_RESTART_FILE" 2>/dev/null || echo 0)
+              elapsed=$$((now - last))
+              if [ "$$elapsed" -ge 120 ]; then
+                echo "gluetun-recover: AUTH_FAILED loop detected — restarting gluetun to pick a different server"
+                echo "$$now" > "$$LAST_RESTART_FILE"
+                docker restart gluetun
+              fi
+            fi
+          done
+        ) &
         # Recover anything already dead/stale when this watcher (re)starts.
         recover
         # Then react whenever gluetun's VPN tunnel comes back healthy.
