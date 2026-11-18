@@ -70,9 +70,7 @@ networks:
       config:
         - subnet: 10.8.1.0/24
   arr-stack:
-    name: arr-stack
     external: true
-    driver: bridge
     ipam:
       config:
         - subnet: 172.20.0.0/24
