@@ -687,8 +687,8 @@ services:
     image: nginx:alpine
     container_name: dashboard
     <<: *default-security
-    user: "0:0"
     volumes:
+      - ./dashboard/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./dashboard:/usr/share/nginx/html:ro
     networks:
       arr-stack:
