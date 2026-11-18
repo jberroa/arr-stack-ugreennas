@@ -31,6 +31,9 @@ configarr/config.yml
 # Recyclarr config (contains API keys - create directly on NAS)
 recyclarr/recyclarr.yml
 
+# Recyclarr config (contains API keys - create directly on NAS)
+recyclarr/recyclarr.yml
+
 # Cloudflared Credentials (locally-managed tunnel)
 cloudflared/config.yml
 cloudflared/credentials.json
