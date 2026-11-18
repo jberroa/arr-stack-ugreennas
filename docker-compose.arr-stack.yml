@@ -687,10 +687,7 @@ services:
     image: nginx:alpine
     container_name: dashboard
     <<: *default-security
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
+    user: "0:0"
     volumes:
       - ./dashboard:/usr/share/nginx/html:ro
     networks:
