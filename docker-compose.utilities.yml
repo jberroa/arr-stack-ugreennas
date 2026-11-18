@@ -148,9 +148,13 @@ services:
             fi
           done
         }
-        # Background: poll gluetun logs every 30s for AUTH_FAILED loops and
-        # restart gluetun to force a different server. Throttled to once per
-        # 120s so a persistently bad account can't cause a restart storm.
+        # Background: poll gluetun logs every 30s for stuck-server loops and
+        # restart gluetun to force a different server. Catches both AUTH_FAILED
+        # (bad credentials cached against one server) and TLS errors (server
+        # unreachable). Throttled to once per 300s: a TLS error fires every
+        # ~75s so we need at least 4 consecutive failures before acting, which
+        # avoids restarting on a single transient blip. AUTH_FAILED fires faster
+        # so the 300s window still catches a persistent loop promptly.
         # When gluetun comes back healthy the events loop below calls recover()
         # to revive the dependents — no extra logic needed here.
         (
@@ -158,12 +162,18 @@ services:
           echo 0 > "$$LAST_RESTART_FILE"
           while true; do
             sleep 30
-            if docker logs gluetun --since 60s 2>&1 | grep -q "AUTH_FAILED"; then
+            recent=$$(docker logs gluetun --since 60s 2>&1)
+            if printf '%s' "$$recent" | grep -qE "AUTH_FAILED|TLS key negotiation failed"; then
               now=$$(date +%s)
               last=$$(cat "$$LAST_RESTART_FILE" 2>/dev/null || echo 0)
               elapsed=$$((now - last))
-              if [ "$$elapsed" -ge 120 ]; then
-                echo "gluetun-recover: AUTH_FAILED loop detected — restarting gluetun to pick a different server"
+              if [ "$$elapsed" -ge 300 ]; then
+                if printf '%s' "$$recent" | grep -q "AUTH_FAILED"; then
+                  reason="AUTH_FAILED loop"
+                else
+                  reason="TLS error loop"
+                fi
+                echo "gluetun-recover: $$reason detected — restarting gluetun to pick a different server"
                 echo "$$now" > "$$LAST_RESTART_FILE"
                 docker restart gluetun
               fi
