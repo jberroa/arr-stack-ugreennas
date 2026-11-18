@@ -104,6 +104,11 @@ http:
       entryPoints: [web]
       service: beszel-lan
 
+    dash-lan:
+      rule: "Host(`dash.lan`) || Host(`dash.loschavalos.com`)"
+      entryPoints: [web]
+      service: dash-lan
+
   middlewares:
     jellyseerr-redirect:
       redirectRegex:
@@ -188,3 +193,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://172.20.0.15:8090"
+
+    dash-lan:
+      loadBalancer:
+        servers:
+          - url: "http://172.20.0.16:80"

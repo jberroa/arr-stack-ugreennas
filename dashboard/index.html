@@ -1,0 +1,486 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Arr Stack</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+:root {
+  --bg:        #0f1117;
+  --surface:   #171b24;
+  --border:    #252b38;
+  --muted:     #3a4155;
+  --text:      #c8d0e0;
+  --dim:       #6b7590;
+  --bright:    #edf0f7;
+  --accent:    #3d9cf0;
+  --accent-lo: rgba(61,156,240,.12);
+
+  --c-media:   #3db87a;
+  --c-arr:     #e07c3a;
+  --c-dl:      #9b6fe0;
+  --c-net:     #3d9cf0;
+  --c-mon:     #d4a847;
+
+  --font-ui:   'IBM Plex Mono', 'Courier New', monospace;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f0f2f7; --surface: #ffffff; --border: #dde1ec; --muted: #c4cad9;
+    --text: #3a4155; --dim: #8891a8; --bright: #111827;
+    --accent-lo: rgba(61,156,240,.1); color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f0f2f7; --surface: #ffffff; --border: #dde1ec; --muted: #c4cad9;
+  --text: #3a4155; --dim: #8891a8; --bright: #111827;
+  --accent-lo: rgba(61,156,240,.1); color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100%;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+header {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.header-left { display: flex; align-items: baseline; gap: 10px; }
+.site-name { font-family: var(--font-ui); font-size: 13px; font-weight: 500; color: var(--bright); letter-spacing: .03em; }
+.nas-ip { font-family: var(--font-ui); font-size: 11px; color: var(--dim); }
+.header-controls { display: flex; align-items: center; gap: 8px; }
+
+.access-toggle { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.access-toggle button {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 500; letter-spacing: .04em;
+  padding: 5px 11px; border: none; background: none; color: var(--dim); cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.access-toggle button.active { background: var(--accent-lo); color: var(--accent); }
+
+.ts-pill {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 500; letter-spacing: .04em;
+  padding: 5px 10px; border-radius: 6px; border: 1px solid; cursor: default;
+}
+.ts-pill.ok   { border-color: var(--c-media); color: var(--c-media); background: rgba(61,184,122,.1); }
+.ts-pill.warn { border-color: var(--c-mon);   color: var(--c-mon);   background: rgba(212,168,71,.1); }
+
+main { padding-block: 20px 36px; display: flex; flex-direction: column; gap: 28px; }
+
+.section-label { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.section-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.section-title { font-family: var(--font-ui); font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+  transition: border-color .15s;
+}
+.card:hover { border-color: var(--muted); }
+.card-top { display: flex; align-items: center; justify-content: space-between; }
+.card-name { font-weight: 600; font-size: 13px; color: var(--bright); }
+.card-desc { font-size: 12px; color: var(--dim); }
+.card-links { display: flex; flex-direction: column; gap: 4px; }
+
+.link-row { display: flex; align-items: center; gap: 6px; }
+.link-badge {
+  font-family: var(--font-ui); font-size: 9px; font-weight: 500; letter-spacing: .06em;
+  text-transform: uppercase; padding: 2px 5px; border-radius: 3px; flex-shrink: 0;
+  min-width: 36px; text-align: center;
+}
+.badge-lan { background: rgba(61,156,240,.15); color: var(--accent); }
+.badge-ip  { background: rgba(107,117,144,.15); color: var(--dim); }
+.badge-ts  { background: rgba(61,184,122,.15);  color: var(--c-media); }
+
+.link-url {
+  font-family: var(--font-ui); font-size: 11px; color: var(--text); text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+  transition: color .12s;
+}
+.link-url:hover { color: var(--accent); }
+
+.remote-note {
+  margin-top: 20px; padding: 14px 16px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-size: 13px; line-height: 1.6; color: var(--text);
+}
+.remote-note h3 {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 500;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin-bottom: 10px;
+}
+.remote-note ol { padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+.remote-note code { font-family: var(--font-ui); font-size: 11px; background: var(--border); padding: 1px 5px; border-radius: 3px; }
+.remote-note a { color: var(--accent); }
+
+@media (max-width: 480px) { .grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 360px) { .grid { grid-template-columns: 1fr; } }
+</style>
+
+<header>
+  <div class="header-left">
+    <span class="site-name">arr-stack</span>
+    <span class="nas-ip">192.168.68.101</span>
+  </div>
+  <div class="header-controls">
+    <div class="access-toggle">
+      <button class="active" onclick="setMode('lan')" id="btn-lan">LAN</button>
+      <button onclick="setMode('ts')" id="btn-ts">TAILSCALE</button>
+    </div>
+    <span class="ts-pill ok" id="ts-status">TS: OK</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- MEDIA -->
+  <section>
+    <div class="section-label">
+      <div class="section-dot" style="background:var(--c-media)"></div>
+      <span class="section-title">Media</span>
+    </div>
+    <div class="grid">
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Jellyfin</span></div>
+        <span class="card-desc">Stream movies &amp; TV</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://jellyfin.lan:8096">jellyfin.lan:8096</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="8096">100.89.209.17:8096</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Seerr</span></div>
+        <span class="card-desc">Request movies &amp; shows</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://seerr.lan:5055">seerr.lan:5055</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="5055">100.89.209.17:5055</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Audiobookshelf</span></div>
+        <span class="card-desc">Audiobook library</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://abs.lan:13378">abs.lan:13378</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="13378">100.89.209.17:13378</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ARR APPS -->
+  <section>
+    <div class="section-label">
+      <div class="section-dot" style="background:var(--c-arr)"></div>
+      <span class="section-title">Library Management</span>
+    </div>
+    <div class="grid">
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Sonarr</span></div>
+        <span class="card-desc">TV series automation</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://sonarr.lan:8989">sonarr.lan:8989</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="8989">100.89.209.17:8989</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Radarr</span></div>
+        <span class="card-desc">Movie automation</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://radarr.lan:7878">radarr.lan:7878</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="7878">100.89.209.17:7878</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Prowlarr</span></div>
+        <span class="card-desc">Indexer manager</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://prowlarr.lan:9696">prowlarr.lan:9696</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="9696">100.89.209.17:9696</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Bazarr</span></div>
+        <span class="card-desc">Subtitle downloads</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://bazarr.lan:6767">bazarr.lan:6767</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="6767">100.89.209.17:6767</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Readarr</span></div>
+        <span class="card-desc">Ebook automation</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://readarr.lan:8787">readarr.lan:8787</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="8787">100.89.209.17:8787</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- DOWNLOADS -->
+  <section>
+    <div class="section-label">
+      <div class="section-dot" style="background:var(--c-dl)"></div>
+      <span class="section-title">Downloads</span>
+    </div>
+    <div class="grid">
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">qBittorrent</span></div>
+        <span class="card-desc">Torrent client · via VPN</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://qbit.lan:8085">qbit.lan:8085</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="8085">100.89.209.17:8085</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">SABnzbd</span></div>
+        <span class="card-desc">Usenet client · via VPN</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://sabnzbd.lan:8082">sabnzbd.lan:8082</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="8082">100.89.209.17:8082</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- NETWORK -->
+  <section>
+    <div class="section-label">
+      <div class="section-dot" style="background:var(--c-net)"></div>
+      <span class="section-title">Network</span>
+    </div>
+    <div class="grid">
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Pi-hole</span></div>
+        <span class="card-desc">DNS · ad blocker</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://pihole.lan:8081/admin">pihole.lan:8081/admin</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="8081" data-path="/admin">100.89.209.17:8081/admin</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Traefik</span></div>
+        <span class="card-desc">Reverse proxy dashboard</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://traefik.lan:9090">traefik.lan:9090</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="9090">100.89.209.17:9090</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- MONITORING -->
+  <section>
+    <div class="section-label">
+      <div class="section-dot" style="background:var(--c-mon)"></div>
+      <span class="section-title">Monitoring</span>
+    </div>
+    <div class="grid">
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Uptime Kuma</span></div>
+        <span class="card-desc">Service health</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://uptime.lan:3001">uptime.lan:3001</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="3001">100.89.209.17:3001</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">Beszel</span></div>
+        <span class="card-desc">CPU · RAM · disk history</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://beszel.lan:8090">beszel.lan:8090</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="8090">100.89.209.17:8090</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top"><span class="card-name">DUC</span></div>
+        <span class="card-desc">Disk usage treemap</span>
+        <div class="card-links">
+          <div class="link-row lan-row">
+            <span class="link-badge badge-lan">LAN</span>
+            <a class="link-url" href="http://duc.lan:8838">duc.lan:8838</a>
+          </div>
+          <div class="link-row ts-row" style="display:none">
+            <span class="link-badge badge-ts">TS</span>
+            <a class="link-url ts-link" data-port="8838">100.89.209.17:8838</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="remote-note">
+    <h3>Remote access via Tailscale</h3>
+    <ol>
+      <li>Connect Tailscale on your device — the NAS is <code>arr-stack-nas</code> at <code>100.89.209.17</code>.</li>
+      <li>Switch to <strong>Tailscale</strong> mode above — links update to the Tailscale IP automatically.</li>
+      <li>For <code>*.lan</code> over Tailscale: in <a href="https://login.tailscale.com/admin/dns" target="_blank">Tailscale Admin → DNS</a>, add a custom nameserver <code>100.89.209.17</code> restricted to <code>*.lan</code>.</li>
+    </ol>
+  </div>
+
+</main>
+
+<script>
+const TS_IP = '100.89.209.17';
+
+function setMode(mode) {
+  const lanRows = document.querySelectorAll('.lan-row');
+  const tsRows  = document.querySelectorAll('.ts-row');
+  document.getElementById('btn-lan').classList.toggle('active', mode === 'lan');
+  document.getElementById('btn-ts').classList.toggle('active', mode === 'ts');
+
+  if (mode === 'lan') {
+    lanRows.forEach(r => r.style.display = '');
+    tsRows.forEach(r => r.style.display = 'none');
+  } else {
+    lanRows.forEach(r => r.style.display = 'none');
+    tsRows.forEach(r => {
+      r.style.display = '';
+      const a = r.querySelector('.ts-link');
+      if (a) {
+        const port = a.dataset.port;
+        const path = a.dataset.path || '';
+        a.href = `http://${TS_IP}:${port}${path}`;
+        a.textContent = `${TS_IP}:${port}${path}`;
+      }
+    });
+  }
+  try { localStorage.setItem('arr-mode', mode); } catch(_) {}
+}
+
+try {
+  const saved = localStorage.getItem('arr-mode');
+  if (saved === 'ts') setMode('ts');
+  else document.querySelectorAll('.ts-row').forEach(r => r.style.display = 'none');
+} catch(_) {
+  document.querySelectorAll('.ts-row').forEach(r => r.style.display = 'none');
+}
+</script>
+
+</body></html>

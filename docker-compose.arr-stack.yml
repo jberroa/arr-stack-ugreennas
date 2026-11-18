@@ -678,3 +678,26 @@ services:
       retries: 2
       start_period: 60s
 
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DASHBOARD - Static service directory. Lists all services with LAN and
+  # Tailscale links. Served via nginx.
+  # Access: dash.lan | dash.loschavalos.com
+  # ═══════════════════════════════════════════════════════════════════════════
+  dashboard:
+    image: nginx:alpine
+    container_name: dashboard
+    <<: *default-security
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+    networks:
+      arr-stack:
+        ipv4_address: 172.20.0.16
+    restart: always
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
