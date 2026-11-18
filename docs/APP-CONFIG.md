@@ -21,7 +21,7 @@ See **[Quick Reference → Service Connection Guide](REFERENCE.md#service-connec
 | | Script-Assisted (Recommended) | Manual |
 |---|---|---|
 | **Time** | ~5 minutes | ~30 minutes |
-| **What happens** | Script configures qBit, Sonarr, Radarr, Prowlarr, Bazarr; you do the rest manually | You configure everything through the web UI |
+| **What happens** | Script configures qBit, Sonarr, Radarr, Prowlarr, Bazarr, plus SABnzbd's `other` category, Seerr's metadata source and Pi-hole's upstream DNS; you do the rest manually | You configure everything through the web UI |
 | **Guide** | **[APP-CONFIG-QUICK.md](APP-CONFIG-QUICK.md)** | Continue below ↓ |
 
 ---
@@ -39,6 +39,11 @@ Streams your media library to any device.
 3. **Add Libraries:**
    - Movies: Content type "Movies", Folder `/data/media/movies`
    - TV Shows: Content type "Shows", Folder `/data/media/tv`
+   - Audiobooks (optional): Content type "Books", Folders `/data/media/audiobooks`, `/data/usenet/complete/other` and `/data/torrents/other` — the last two are where Prowlarr's search-page grabs land (see [4.6 step 8](#46-prowlarr-indexer-manager)), so an audiobook grabbed there appears in Jellyfin with no manual move. A Books library ignores anything that isn't audio or an ebook, so other downloads in that lane don't show up. **The Android TV app cannot play this library** — only the web client implements Books.
+   - Audiobooks (TV) (optional): Content type "Music", Folder `/data/media/audiobooks-tv`. That folder holds `.m4a` hardlinks of the same files, made by `scripts/audiobooks-tv-mirror.sh` on a timer ([MAINTENANCE.md](MAINTENANCE.md#audiobooks-on-the-tv)); the TV app plays them as audio tracks with resume, no chapters.
+4. **Put TheTVDB first for TV:** Dashboard → Plugins → Catalog → **TheTVDB** → Install, then restart Jellyfin (check Dashboard → Active Devices first; a restart cuts any playback). In the plugin's settings tick **Import season name** → Save. Then Dashboard → Libraries → TV Shows → Manage Library → under **Series**, **Seasons** and **Episodes**, move **TheTVDB** above TheMovieDb in both *Metadata downloaders* and *Image fetchers* → OK.
+
+> **Why TVDB for TV:** Sonarr files series by TVDB and names each folder with the TVDB id. Jellyfin ships with only TMDB, which cuts some shows up differently — TMDB lists Netflix's *Monster* as a separate show per season, TVDB as one anthology — and a TMDB split entry sometimes carries the anthology's TVDB id, so Jellyfin identifies the folder as the wrong season and puts that season's title and posters over the episodes you actually have (seen 2026-09-15: *Lizzie Borden* artwork on the Ed Gein season). With TheTVDB first, Jellyfin reads the database Sonarr wrote, and anthology seasons get their own names and posters. Shows already in the library keep their metadata and artwork until you refresh them (⋮ → Refresh metadata → Replace all images).
 
 > **Optional:** [Enable hardware transcoding](APP-CONFIG-ADVANCED.md#hardware-transcoding-intel-quick-sync) for GPU-accelerated playback (recommended for Ugreen NAS). Also see [Kodi for Fire TV](APP-CONFIG-ADVANCED.md#kodi-for-fire-tv-dolby-vision--truehd-atmos) and [RAID5 streaming tuning](APP-CONFIG-ADVANCED.md#raid5-streaming-tuning).
 
@@ -72,6 +77,7 @@ Receives download requests from Sonarr and Radarr and downloads files via torren
 6. **Create categories:** Right-click categories → Add
    - `tv` → Save path: `/data/torrents/tv`
    - `movies` → Save path: `/data/torrents/movies`
+   - `other` → Save path: `/data/torrents/other` — anything grabbed from Prowlarr's own search page (see [4.6 step 8](#46-prowlarr-indexer-manager)); nothing imports from it
 
    > **Why categories matter:** Sonarr/Radarr tell qBittorrent which category to use when requesting downloads. qBittorrent puts files in the category's save path. After download completes, Sonarr/Radarr create hardlinks from `/data/torrents/tv` or `/data/torrents/movies` to your library (`/data/media/tv` or `/data/media/movies`). If categories don't match, downloads won't be found.
 
@@ -147,7 +153,7 @@ Searches for TV shows, sends download links to qBittorrent/SABnzbd, and organize
    - Episode Metadata: ✅
    - All image options: ❌ (Jellyfin handles its own artwork)
 
-5. **Configure naming (TRaSH recommended):** Settings → Media Management → Episode Naming
+6. **Configure naming (TRaSH recommended):** Settings → Media Management → Episode Naming
    - **Rename Episodes:** ✅
    - **Standard Episode Format:** `{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{Custom Formats }{Quality Full}]{[MediaInfo AudioCodec}{ MediaInfo AudioChannels]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo VideoCodec]}{-Release Group}`
    - **Daily Episode Format:** `{Series TitleYear} - {Air-Date} - {Episode CleanTitle} [{Custom Formats }{Quality Full}]{[MediaInfo AudioCodec}{ MediaInfo AudioChannels]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo VideoCodec]}{-Release Group}`
@@ -162,6 +168,53 @@ Searches for TV shows, sends download links to qBittorrent/SABnzbd, and organize
    - Settings → Custom Formats → + → Name: `Reject ISO`
    - Add condition: Release Title, value `\.iso$`, check **Regex**
    - Settings → Profiles → your quality profile → set `Reject ISO` to `-10000`
+
+8. **Refuse Dolby Vision Profile 5:** Profile 5 has no HDR10 fallback — its base layer is IPT-PQ, which is meaningless unless the player applies the Dolby Vision metadata. Players that don't (the Jellyfin Android TV client among them) show a sharp picture with a green/magenta cast for the whole episode. Profile 8.1 carries a standard HDR10 base layer and plays correctly anywhere.
+
+   Release titles are the only signal available here — custom formats can't inspect the Dolby Vision configuration record — but they're a reliable one: `DV` alone means Profile 5, `DV HDR` or `DoVi HDR` means 8.1.
+
+   - Settings → Custom Formats → + → Name: `DV (Profile 5)` — check **Regex** and **Required** on all three conditions:
+     - Release Title: `\b(dv|dovi|dolby[ .\-_]?vision)\b`
+     - Release Title: `\bhdr|\bhlg\b|\bpq\b` — also check **Negate**
+     - Release Title: `\b(blu-?ray|remux|bdrip|bdremux)\b` — also check **Negate**
+   - Settings → Custom Formats → + → Name: `DV HDR10 (Profile 8.1)` — **Regex** and **Required** on all three:
+     - Release Title: `\b(dv|dovi|dolby[ .\-_]?vision)\b`
+     - Release Title: `\bhdr|\bhlg\b|\bpq\b`
+     - Release Title: `^(?!.*\b(hybrid|p8|dvp8|for[ .\-_]?lg[ .\-_]?tvs?)\b).*\b(bd)?remux\b(?![^\[]*\])` — also check **Negate**
+   - Settings → Profiles → your quality profile → `DV (Profile 5)` = `-1000`, `DV HDR10 (Profile 8.1)` = `500`
+   - Same profile → **Upgrade Until Custom Format Score** = `500`
+
+   > The upgrade-until score is what lets a Profile 8.1 release replace a file you already have. Left at `0`, a file that has reached the quality cutoff counts as finished, however good the release that turns up later. That matters most for HDR10+-only 4K WEB releases whose titles say only `HDR` (step 9 refuses the rest): a display with HDR10 but no HDR10+ (LG's 2020 OLEDs, for example) makes Jellyfin transcode or remux them instead of direct-playing. With the score at `500`, the upgrades it opens are to an 8.1 release or to a repack (step 10, which scores repacks well below 500), and an 8.1 file then sits at the cutoff, so nothing loops.
+   >
+   > The disc-source exclusion is deliberate. UHD Blu-ray Dolby Vision is **Profile 7**, whose base layer *is* HDR10-compatible, so penalising it would trade good remuxes for worse WEB rips.
+   >
+   > The third 8.1 condition keeps Profile 7 remuxes from earning the 8.1 score: their titles say `DV HDR10` too. The Jellyfin Android TV client on a Fire TV can't play Profile 7, so Jellyfin transcodes it and tone-maps the picture to SDR, while a plain HDR10 remux direct-plays in HDR. A remux marked as converted to 8.1 (`HYBRID`, `P8`, `For LGTVs`) keeps the score. The `(?![^\[]*\])` skips the `[Remux-2160p]` in a file's own name, so a converted remux still scores 500 once it is renamed.
+   >
+   > With **Minimum Custom Format Score** left at `0`, the `-1000` makes Profile 5 a reject rather than a preference — the next-best release is taken instead. If you'd rather rank it down without refusing it outright, lower the profile's minimum score below `-1000`.
+
+9. **Refuse HDR10+ without Dolby Vision:** HDR10+ sits on an HDR10 base layer, but a display with HDR10 and no HDR10+ still doesn't get direct play. Jellyfin transcodes it instead, and on a Fire TV Cube driving an LG BX that froze within seconds. With Dolby Vision alongside, the player takes the DV and plays it.
+
+   Titles rarely say so. In one library, 2 of 68 HDR10+-only files came from a title saying `HDR10+`, and 66 from one saying `HDR`. The streaming service is the second signal: Amazon's `HDR` was HDR10+ 36 times in 37, Apple TV+'s and Paramount+'s every time, Netflix's never. Scene titles name no service and split evenly (27 HDR10+, 25 HDR10), so this leaves them alone; refusing them would refuse good HDR10 too. Step 8's upgrade-until score is what replaces those, once a Dolby Vision release appears.
+
+   - Settings → Custom Formats → + → Name: `HDR10+ (no DV)` — check **Regex** and **Required** on both conditions:
+     - Release Title: `(?<!\[)\bhdr10(\+|p\b|[ .\-_]?plus\b)|\b(amzn|atvp|pmtp)\b.*\bhdr\b|\bhdr\b.*\b(amzn|atvp|pmtp)\b`
+     - Release Title: `\b(dv|dovi|dolby[ .\-_]?vision)\b` — also check **Negate**
+   - Settings → Profiles → your quality profile → `HDR10+ (no DV)` = `-1000`
+
+   > Both conditions must be **Required**. A release-title condition left optional counts as matched whenever any other release-title condition in the format matches, so an optional first line would match every release without DV.
+   >
+   > The `(?<!\[)` keeps the file's own name out of it. A custom format matches the file name as well as the release title, and the TRaSH naming scheme writes `[HDR10Plus]` into the name from mediainfo. Without it, a scene `HDR` file would drop to `-1000` once imported, every other release of that episode would look like an upgrade, and each would be downloaded in turn.
+
+10. **Rank repacks by score, not ahead of everything:** Sonarr's default *Prefer and Upgrade* compares a release's revision before its custom format score, so a `PROPER` with no Dolby Vision beats an 8.1 release, and once it's on disk an 8.1 release can never replace it.
+    - Settings → Media Management → *File Management* (Show Advanced) → **Propers and Repacks** = `Do not Prefer`
+    - Settings → Custom Formats → add the three [TRaSH repack formats](https://trash-guides.info/Sonarr/sonarr-collection-of-custom-formats/#repackproper): `Repack/Proper`, `Repack2`, `Repack3`
+    - Settings → Profiles → your quality profile → `Repack/Proper` = `5`, `Repack2` = `6`, `Repack3` = `7`
+
+    > A repack then still replaces its own release, but loses to 8.1. Keep every repack score below the 8.1 score, or "Do not Prefer" puts a PROPER back ahead of Dolby Vision.
+
+11. **Refuse DTS 6.1:** Settings → Custom Formats → + → name `DTS 6.1`, one **Release Title** condition, **Regex** and **Required** ticked, value `(?<!\[)\bdts([ .\-_]?(hd|ma|es))*[ .\-_]?6[ .]1\b|(?<!\[)\bdts[ .\-_]?es\b`. Score it `-1000` in every quality profile. The Jellyfin Android TV client on a Fire TV passes DTS through as the core, and a DTS-HD MA 6.1 track (whose core is 6.1 too) stopped at 0 ms every time, while a 7.1 track with a 5.1 core played. The `(?<!\[)` keeps a file's own `[DTS-HD MA 6.1]` name out of it, so an imported file scores what its release did.
+
+12. **Refuse releases that put a dub ahead of English:** Settings → Custom Formats → + → name `Foreign dub first`, one **Release Title** condition, **Required** ticked, value `\b(ita|tr|tur|spa|esp|fre|fra|ger|rus|ukr|hin|pol|por)[ .\-_]+eng?\b|(?<!^)\bdual\b`. Score it `-1000` in every quality profile. Italian, Turkish and Brazilian groups (MeM, TURG, TOSSATO, BiOMA) re-release English shows as `ITA.ENG`, `ita-eng` or `DUAL`, with their dub as the default track, so the episode starts in Turkish. Many of these releases carry a Dolby Vision 8.1 picture, so step 8's `+500` would otherwise grab them as upgrades. The rule refuses those too: an episode that starts in English matters more than the picture. The groups put their own dub first on foreign-language shows as well, so the rule applies to every series. One thing it costs: anime releases marked `Dual-Audio` are refused too.
 
 ## 4.5 Radarr (Movies)
 
@@ -180,8 +233,9 @@ Searches for movies, sends download links to qBittorrent/SABnzbd, and organizes 
 
    **SABnzbd (Usenet):** *(if configured)*
    - Add → SABnzbd
-   - Host: `localhost` (SABnzbd also runs via gluetun)
+   - Host: `gluetun` (SABnzbd is behind the VPN)
    - Port: `8080`
+   - **Note:** SABnzbd's `host_whitelist` must include `gluetun` or it returns `403 Forbidden`.
    - API Key: (from SABnzbd Config → General)
    - Category: `movies`
 
@@ -201,6 +255,12 @@ Searches for movies, sends download links to qBittorrent/SABnzbd, and organizes 
    - Add condition: Release Title, value `\.iso$`, check **Regex**
    - Settings → Profiles → your quality profile → set `Reject ISO` to `-10000`
 
+8. **Refuse Dolby Vision Profile 5:** same two custom formats, scores and upgrade-until score as [Sonarr step 8](#44-sonarr-tv-shows) — Radarr needs them independently, and the disc-source exclusion matters more here, since UHD Blu-ray remuxes are Profile 7 and must not be penalised.
+9. **Refuse HDR10+ without Dolby Vision:** the same custom format and score as [Sonarr step 9](#44-sonarr-tv-shows). A UHD Blu-ray with HDR10+ and no Dolby Vision is refused too when its title says so.
+10. **Rank repacks by score:** the same setting, formats and scores as [Sonarr step 10](#44-sonarr-tv-shows) (Radarr's [repack formats](https://trash-guides.info/Radarr/Radarr-collection-of-custom-formats/#repackproper) are the same three).
+11. **Refuse releases that put a dub ahead of English:** the same custom format and score as [Sonarr step 12](#44-sonarr-tv-shows). Italian and Turkish groups re-release English films as `iTA-ENG`, `Ita.Eng`, `[TR-EN]` or `DUAL`, with their dub as the default track, so the film starts in Italian. Use the title, not a **Language** condition: Radarr reads a file's languages from its mediainfo, so a Language condition also hits English remuxes that carry extra dubs, and they would be re-downloaded over and over.
+12. **Refuse DTS 6.1:** the same custom format and score as [Sonarr step 11](#44-sonarr-tv-shows). Most 6.1 tracks are on films (DTS-ES and DTS-HD MA 6.1 Blu-rays).
+
 ### Prefer Usenet over Torrents (Optional)
 
 If you have both qBittorrent and SABnzbd configured, Sonarr/Radarr will grab whichever is available first. To prefer Usenet (faster, no seeding):
@@ -216,7 +276,7 @@ This gives Usenet a 30-minute head start before considering torrents.
 
 ### NFO Metadata
 
-> **Applies to both Sonarr (step 4 above) and Radarr (step 4 above).**
+> **Applies to both Sonarr (step 5 above) and Radarr (step 5 above).**
 >
 > **Why this matters:** Without NFO files, Jellyfin identifies media by guessing from the filename. For movies or shows with common titles shared by multiple entries on TMDB, it can match the wrong one. When the TMDB IDs don't agree between Radarr/Sonarr and Jellyfin, Seerr can't link them — so requests stay stuck at "Requested" even though the file is downloaded and playable.
 >
@@ -241,6 +301,8 @@ Manages torrent/Usenet indexers and syncs them to Sonarr/Radarr.
 
    > **Tested with:** NZBGeek (~$12/year, reliable). Free alternatives: DrunkenSlug, NZBFinder.
 
+   > **Public torrent indexers carry malware.** On 2026-09-10 one of them (LimeTorrents) answered five routine new-episode searches with ~1 GB Windows executables named after real release groups, plus two season packs labelled S06 that contained S05 — while every Usenet result in the same window was clean. If you add public indexers: rank a Usenet indexer above them (Indexers → edit → **Priority**; lower wins, and every indexer defaults to 25, so without this Usenet has no advantage), and leave YTS out of a TV setup entirely — it only carries movies, so anything it returns for a series is mislabelled. The stack's own defences, in order: qBittorrent drops executables before a byte transfers (set by `configure-apps.sh`), Sonarr/Radarr refuse to import a release containing one, and [`scan-executables.sh`](MAINTENANCE.md#executable-scan) finds anything that still reached disk.
+
 4. **Add FlareSolverr** (for protected torrent sites):
    - Settings → Indexers → Add FlareSolverr
    - Host: `http://localhost:8191` (FlareSolverr shares Gluetun's network with Prowlarr)
@@ -253,6 +315,12 @@ Manages torrent/Usenet indexers and syncs them to Sonarr/Radarr.
    - API Key: (from Sonarr → Settings → General → Security)
 6. **Connect to Radarr:** Same process — Radarr Server: `http://172.20.0.11:7878`
 7. **Sync:** Settings → Apps → Sync App Indexers
+8. **Download clients for Prowlarr's own search page** (optional but recommended): Settings → Download Clients → +
+   - qBittorrent: Host `localhost`, Port `8085`, your qBittorrent username/password, Category `other`
+   - SABnzbd: Host `localhost`, Port `8080`, SABnzbd API key, Category `other`
+   - `localhost` is right *here* — Prowlarr shares Gluetun's network with both clients. Create the `other` category in qBittorrent (4.1) and SABnzbd (Config → Categories, folder left blank) first.
+   - Sonarr and Radarr never use these; they grab through their own clients into `tv`/`movies`. This pair exists so the search page's download button works for anything that is neither — an ISO, an audiobook, music. Without it that button does nothing at all: no grab, no error, nothing in History.
+   - Audiobooks grabbed this way play in Jellyfin if you add its Books library over both `other` folders (see [4.1](#41-jellyfin-media-server)).
 
 ## 4.7 Seerr (Request Manager)
 
@@ -267,17 +335,20 @@ Lets users browse and request movies/TV shows.
    - Settings → Services → Add Radarr:
      - **Hostname:** `radarr` (Radarr is on the bridge with its own Docker DNS name)
      - **Port:** `7878`
-     - **Quality Profile:** `UHD Bluray + WEB` (ensures all requests get the best available quality)
+     - **Quality Profile:** the one you want requests to use. If you ran [Configarr](UTILITIES.md#configarr-setup), its `UHD Bluray + WEB` (4K, falling back to 1080p) is one option. Avoid the built-in `Ultra-HD`: it is 4K-only, so a title with no 4K release never downloads
      - **External URL:** `http://radarr.lan` (or `http://NAS_IP:7878`) — makes "Open in Radarr" links work in your browser
    - Settings → Services → Add Sonarr:
      - **Hostname:** `sonarr`
      - **Port:** `8989`
-     - **Quality Profile:** `Ultra-HD`
+     - **Quality Profile:** your choice again (Configarr's is `WEB-2160p`; the built-in `Ultra-HD` is 4K-only here too)
      - **External URL:** `http://sonarr.lan` (or `http://NAS_IP:8989`)
 5. **Enable Jellyfin Libraries:** Settings → Jellyfin → toggle **Movies** and **TV** on → Save
 6. **Sync Libraries:** On the same page, click **Sync Libraries** then **Start Scan**
+7. **Take series metadata from TVDB:** Settings → Metadata → set both **TV Series** and **Anime** to **TheTVDB** → Save. `configure-apps.sh` does this for you (`--only seerr` to run just that step).
 
 > **Why libraries matter:** Without this, Seerr doesn't know what's already in your Jellyfin library. Movies and shows will stay stuck at "Requested" even after they're downloaded and playable.
+
+> **Why TVDB:** Seerr searches TMDB, but Sonarr only knows TVDB, and the two disagree on how some shows are cut up — TMDB follows the streamer's marketing (three separate *Monster* series), TVDB follows the production (one anthology, four seasons), and release groups name files by TVDB. With TMDB metadata, Seerr shows TMDB's seasons and asks Sonarr for them by number, so "Season 1" of a split entry fetches the wrong season of the anthology, or nothing: the show looks fine on the page and the request fails after the click. Anime, where TMDB often has one season to TVDB's several, is the usual victim. With TVDB metadata the seasons Seerr offers are the seasons Sonarr will fetch. Search stays on TMDB, so a show whose TMDB entry has no TVDB link still asks you to pick the match — but the seasons offered after that are TVDB's. If the right show isn't in that list at all (TVDB files it as a season of something else), add it in Sonarr directly and monitor only that season.
 
 ## 4.8 Bazarr (Subtitles)
 
@@ -285,15 +356,22 @@ Automatically downloads subtitles for your media.
 
 1. **Access:** `http://NAS_IP:6767`
 2. **Enable Authentication:** Settings → General → Security → Forms
-3. **Connect to Sonarr:** Settings → Sonarr → Address `sonarr`, Port `8989` (Sonarr is on the bridge)
-4. **Connect to Radarr:** Settings → Radarr → Address `radarr`, Port `7878` (Radarr is on the bridge)
-5. **Add Providers:** Settings → Providers (OpenSubtitles, etc.)
-6. **Enable Subtitle Sync:** Settings → Subtitles → Subtitle Synchronization:
+3. **Languages — do this before connecting Sonarr/Radarr:** Settings → Languages:
+   - Under *Languages Filter*, tick **English**
+   - Under *Languages Profiles*, add a profile named **English** containing English
+   - Under *Default Settings*, set that profile as the default for both **Series** and **Movies**, then Save
+
+   > **Why first:** Bazarr stamps the default profile onto a series or movie only when it first inserts the row (v1.6.0 `sonarr/sync/parser.py` and `radarr/sync/parser.py`: `if action == 'insert'`; later syncs never touch it), and connecting Sonarr/Radarr starts that first sync immediately. Set the profile afterwards and your existing library has none — only titles added later get it, and you're left fixing the rest with Mass Edit. `configure-apps.sh` runs these in the same order: it manages the profile named **English** (or adopts one whose languages are exactly English, whatever it's called), creates it with the next free id if there isn't one, points both defaults at that id, and leaves any other profiles alone.
+4. **Connect to Sonarr:** Settings → Sonarr → Address `sonarr`, Port `8989` (Sonarr is on the bridge)
+5. **Connect to Radarr:** Settings → Radarr → Address `radarr`, Port `7878` (Radarr is on the bridge)
+6. **Add Providers:** Settings → Providers (OpenSubtitles, etc.)
+7. **Enable Subtitle Sync:** Settings → Subtitles → Subtitle Synchronization:
    - **Subtitle Synchronization:** On — enables `ffsubsync` to re-time subtitles against the audio track
    - **Series Score Threshold:** On (default 90) — auto-syncs series subs scoring below this
    - **Movies Score Threshold:** On (default 70) — auto-syncs movie subs scoring below this
 
    > **Why:** Jellyfin's web player has no manual subtitle delay control. If subs are out of sync, the only fix is re-timing the subtitle file itself — which is exactly what this does.
+8. **Notifications (optional):** if you use [Home Assistant](HOME-ASSISTANT.md), Settings → Notifications → **JSON**, pointed at the same webhook as everything else ([HOME-ASSISTANT.md, Step 2](HOME-ASSISTANT.md#step-2-point-every-sender-at-it) has the URL). `configure-apps.sh` sets it from `HA_WEBHOOK_URL` in `.env`.
 
 ## 4.9 Pi-hole (DNS)
 
@@ -301,7 +379,7 @@ Automatically downloads subtitles for your media.
 
 1. **Access:** `http://NAS_IP:8081/admin`
 2. **Login:** Use password from `PIHOLE_UI_PASS` (password only, no username)
-3. **Upstream DNS:** Settings → DNS → pick upstream servers (1.1.1.1, 8.8.8.8, etc.)
+3. **Upstream DNS:** Settings → DNS → untick the preset upstream servers and set a custom one: `172.20.0.6#5053` (the stack's dnscrypt-proxy, which encrypts the queries) → Save
 
 **Optional:** Set your router's DHCP DNS to your NAS IP for network-wide ad-blocking.
 

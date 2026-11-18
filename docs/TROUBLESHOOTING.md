@@ -2,14 +2,15 @@
 
 ## Gluetun: Harmless Log Noise on Startup
 
-**Symptom:** Two scary-looking lines in `docker logs gluetun` even though the VPN appears to be working:
+**Symptom:** A scary-looking line in `docker logs gluetun` even though the VPN appears to be working:
 
 ```
-ERROR [vpn] getting public IP address information: persisting public ip address: open /tmp/gluetun/ip: permission denied
 INFO  [healthcheck] listening for ICMP packets: not permitted: you can try adding NET_RAW capability to resolve this; permanently falling back to plain DNS over UDP checks
 ```
 
-**Cause:** Both are non-fatal. The first is gluetun unable to cache the detected public IP to a file inside the container — the VPN connection itself is unaffected. The second is gluetun's healthcheck wanting to ping; we drop `NET_RAW` for security, so it falls back to DNS lookups (still a valid health signal).
+**Cause:** Non-fatal. Gluetun's healthcheck wants to ping; we drop `NET_RAW` for security, so it falls back to DNS lookups (still a valid health signal).
+
+> **Not the same thing:** `open /tmp/gluetun/ip: permission denied` (or `clearing public IP data: permission denied`) is **not** noise. It means gluetun lacks `DAC_OVERRIDE`, which the compose file has added back since v1.10.0; without it `/v1/publicip/ip` returns nothing. `git pull`, then recreate gluetun and its dependents ([After a Gluetun RECREATE](#after-a-gluetun-recreate-not-just-a-restart-docker-restart-cannot-save-you)).
 
 **Confirm the VPN is actually working:**
 ```bash
@@ -19,11 +20,45 @@ docker exec gluetun wget -qO- https://ifconfig.me
 
 If that shows a different IP from your home connection, gluetun is fine — leave the warnings alone. If it shows your real IP (or times out), see the gluetun logs for `tunnel down`, `auth failed`, or the container restarting — those are the actual failure modes worth chasing.
 
+## VPN: No Server Answers (Expired Subscription, Revoked Key or Blocked UDP)
+
+**Symptom:** Several notices arrive at once and none of them names a cause: Uptime Kuma's *VPN Check is down* and *qBittorrent is down*, Sonarr's *All indexers are unavailable*, Sonarr and Radarr's *Unable to communicate with qBittorrent*, and later a stuck-request notice blaming indexer backoff. gluetun is `unhealthy`, and `docker logs gluetun` repeats this every six seconds or so, usually with a different server each time:
+
+```
+INFO [wireguard] Connecting to 81.19.208.109:51820
+INFO [wireguard] Wireguard setup is complete. Note Wireguard is a silent protocol and it may or may not work, without giving any error message. ...
+WARN [vpn] restarting VPN because it failed to pass the healthcheck: startup check: all check tries failed: ... dial tcp4 1.1.1.1:443: i/o timeout ...
+```
+
+`check-vpn.sh` names the cause, and so does Kuma's *VPN Check is down* notice if `VPN_CHECK_PUSH_URL` is set ([UTILITIES.md](UTILITIES.md#the-vpn-check-and-why-it-is-a-push-monitor)):
+
+```
+FAIL  No VPN server has answered for 25 h across 7 servers (14,035 attempts). Most likely the Surfshark subscription has expired or the WireGuard key was revoked: check my.surfshark.com. If the account is active, check that outbound UDP 51820 is not blocked. ...
+```
+
+**Cause:** No server sends anything back. WireGuard returns no error, so from inside the stack an expired subscription, a key the provider has revoked, and outbound UDP blocked somewhere between the NAS and the internet look identical: the tunnel sends and never receives.
+
+```bash
+docker exec gluetun ip -s link show tun0    # RX bytes 0 on the current attempt
+docker logs gluetun 2>&1 | grep -o 'Connecting to [0-9.:]*' | sort | uniq -c   # every server, each failing
+```
+
+That message is from a real outage: the subscription had lapsed, and gluetun tried every server in its country for 25 hours before anyone looked.
+
+**Fix:**
+1. Check the account on the provider's site (Surfshark: my.surfshark.com) and renew it if it has lapsed.
+2. If the account is active, check that nothing between the NAS and the internet blocks outbound UDP to the server port (51820 for WireGuard on most providers): a router firewall change, a new router, the ISP.
+3. If it still fails ten minutes after renewing, the key may not have survived the lapse. Make a new one (Surfshark: VPN → Manual setup → Router → WireGuard), put it in `WIREGUARD_PRIVATE_KEY` in `.env`, and recreate gluetun and its dependents ([After a Gluetun RECREATE](#after-a-gluetun-recreate-not-just-a-restart-docker-restart-cannot-save-you)).
+
+**Leave gluetun retrying. Don't stop it or restart it.** The retry is how it heals: once the account works again, the next attempt gets an answer, and the services behind it keep their network because gluetun's container never restarted. In the outage above, the first attempt after the renewal connected half a second after it started, with the same key. A restart reconnects to the same servers with the same key, so it fixes nothing, and it costs the dependents their network namespace ([below](#apps-unreachable-after-a-vpn-reconnect-stale-network-namespace)).
+
+**Not this:** if the host can't get out either, `check-vpn.sh` says "The NAS's own connection is failing too" instead: look at the internet connection and DNS, not the VPN. If one server has failed for minutes and gluetun has tried no other, the server selection allows only that server; widen it, or bounce gluetun onto another ([Throttled VPN Exit Server](#indexers-all-slow--intermittently-failing-throttled-vpn-exit-server)).
+
 ## Indexers: New Releases Never Grab (VPN Exit Country Blocked)
 
 **Symptom:** A monitored episode/movie that is clearly out (aired days ago) never gets grabbed. Sonarr/Radarr history is empty for it, nothing is in the queue, and an interactive search returns **0 releases**. Prowlarr health shows `Indexers unavailable due to failures for more than 6 hours: EZTV` (or another indexer), and that indexer is auto-disabled.
 
-**Cause:** The VPN exit is in a country that legally blocks the indexer. Our stack defaults to `VPN_COUNTRIES=United Kingdom`, and the UK now serves Cloudflare-level legal blocks for several public torrent indexers. The block returns **HTTP 451** with a body like:
+**Cause:** The VPN exit is in a country that legally blocks the indexer. `.env.example` used to default to `VPN_COUNTRIES=United Kingdom` (it's `Netherlands` now), and the UK now serves Cloudflare-level legal blocks for several public torrent indexers. The block returns **HTTP 451** with a body like:
 
 ```
 In response to a legal order, Cloudflare has taken steps to limit access
@@ -56,7 +91,7 @@ cp .env ".env.bak-$(date +%Y%m%d-%H%M%S)"          # .env is gitignored — edit
 sed -i 's/^VPN_COUNTRIES=United Kingdom$/VPN_COUNTRIES=Netherlands/' .env
 
 # Recreate gluetun AND every container sharing its network namespace
-# (sonarr, radarr, prowlarr, qbittorrent, sabnzbd, flaresolverr — all bounce together)
+# (prowlarr, qbittorrent, sabnzbd, flaresolverr — all bounce together)
 docker compose -f docker-compose.arr-stack.yml up -d
 
 # Verify the new exit + that the indexer is reachable again
@@ -69,7 +104,7 @@ echo "$DEF" | python3 -c 'import sys,json;d=json.load(sys.stdin);d["enable"]=Fal
 echo "$DEF" | curl -s -X PUT "http://localhost:9696/api/v1/indexer/3?apikey=$PK" -H "Content-Type: application/json" -d @-
 ```
 
-Surfshark's WireGuard key is account-wide, so changing only `VPN_COUNTRIES` is enough — gluetun picks a server in the new country with the same key. No new config from Surfshark is needed. The VPN only covers the download stack (qBittorrent/usenet/indexers/`*arr`), **not** Jellyfin, so a non-UK exit has no downside for playback. Leave it on a non-blocking country (e.g. Netherlands) to avoid recurrence; revert with the `.env` backup if ever needed.
+Surfshark's WireGuard key is account-wide, so changing only `VPN_COUNTRIES` is enough — gluetun picks a server in the new country with the same key. No new config from Surfshark is needed. The VPN only covers the download stack (qBittorrent, SABnzbd, Prowlarr, FlareSolverr), **not** Jellyfin, Sonarr or Radarr, so a non-UK exit has no downside for playback. Leave it on a non-blocking country (e.g. Netherlands) to avoid recurrence; revert with the `.env` backup if ever needed.
 
 > **Diagnostic gotcha — Prowlarr masks API keys.** `GET /api/v1/indexer/<id>` returns indexer secrets as a short placeholder, **not** the real key. If you curl an indexer's newznab API directly using that masked value you'll get `<error code="102" description="Empty API Key"/>` and zero results — which looks like a dead indexer but isn't. Prowlarr's own searches use the real key (32 chars for NZBgeek). Read the real value from `prowlarr.db` (`Indexers.Settings` JSON) before testing by hand, or just trust Prowlarr's search rather than a manual curl.
 
@@ -77,7 +112,7 @@ Surfshark's WireGuard key is account-wide, so changing only `VPN_COUNTRIES` is e
 
 **Symptom:** Searches feel broken but nothing is hard-down. An interactive search or `GET /api/v1/search` takes **~50s** instead of a second or two. Per-indexer tests are slow (10s+) or return **HTTP 500**, and the slowness hits *everything* riding the tunnel at once — including reliable paid indexers like NZBgeek that should never be slow. Crucially, this is **not** a 451/legal block, and `GET /api/v1/indexerstatus` may show **0 failures** because nothing has crossed the 6-hour auto-disable threshold yet. The web UIs of VPN-protected services (Prowlarr/qBittorrent) also feel laggy and jittery (response times jumping 10ms → 4s).
 
-This can masquerade as unrelated problems: a `*.lan` service like `seerr.lan` "feeling slow" is **not** caused by this (that path is local and never touches the VPN) — but *triggering a search/request inside Jellyseerr* is, because that call fans out seerr → Sonarr/Radarr → Prowlarr → tunnel.
+This can masquerade as unrelated problems: a `*.lan` service like `seerr.lan` "feeling slow" is **not** caused by this (that path is local and never touches the VPN) — but *triggering a search/request inside Seerr* is, because that call fans out seerr → Sonarr/Radarr → Prowlarr → tunnel.
 
 **Cause:** The specific WireGuard server gluetun happened to connect to is congested or throttled (or partially degraded). The country is fine — it's just a bad server, and gluetun will sit on it indefinitely. The exit IP resolves and basic reachability works (so it's not a tunnel-down or auth failure), it's just slow. Distinct from the geo-block case above (HTTP 451), which needs a *country* change.
 
@@ -109,10 +144,37 @@ docker exec gluetun wget -qO- https://ipinfo.io/ip
 # REQUIRED: restart every container sharing gluetun's network namespace.
 # Restarting gluetun alone severs their networking — they go dead (empty/000 responses)
 # until bounced too.
-docker restart prowlarr qbittorrent          # add sabnzbd/sonarr/radarr/bazarr if they share the netns
+docker restart prowlarr qbittorrent sabnzbd flaresolverr   # gluetun-recover does this if you run the utilities
 ```
 
 Re-run the aggregate search to confirm it's back to ~1-2s. (Observed 2026-06-19: a throttled NL server gave a 54s search with two indexers at HTTP 500; `docker restart gluetun` + bouncing the dependents dropped it to **1.2s**, no config change.) If the new server is *also* slow, restart gluetun again to roll the dice on another. Only switch `VPN_COUNTRIES` (the section above) if you actually see HTTP 451 — that's a different problem.
+
+## Indexers: All Unavailable Every Monday Morning (UGOS Docker Auto-Update)
+
+**Symptom:** Early on a Monday, Sonarr and Radarr report **"All indexers are unavailable due to failures"**. Their logs show `Connection refused (gluetun:9696)`, and `docker ps` has **no `prowlarr` container at all** (or no `qbittorrent` / `sabnzbd`). A few hours later it is back, because the nightly backup's safety net ran `docker compose up -d` for whatever was missing. So it looks like a transient indexer blip, not a deleted container.
+
+**Cause:** the UGOS Docker app's own image updater. With **Update detection** and **Update as scheduled** on (weekly, Monday 04:00 by default), UGOS pulls any image whose tag was re-pushed upstream, **removes the old container**, and creates a new one from its saved settings. That create always fails for containers with `network_mode: "service:gluetun"`:
+
+```
+failed to create new container: ... conflicting options: port exposing and the container type network mode
+```
+
+The old container is already gone by then. The containers it *can* rebuild (traefik, gluetun-recover, sonarr, …) are recreated outside compose, which is what later makes `docker compose up -d --dry-run` want to recreate them. If it ever did this to gluetun, the whole VPN side would go down with it. (Observed 2026-10-12: Prowlarr missing 04:00–06:02. The same log showed it had already deleted qBittorrent, SABnzbd and Prowlarr on earlier Mondays.)
+
+**Fix:** UGOS **Docker** app → **Management** → **Image update** → untick **Update detection** → **Apply**. This stack pins image versions in its compose files; update them through the repo and compose, never through UGOS.
+
+**Restore anything it deleted** (dry-run first; see [After a Gluetun RECREATE](#after-a-gluetun-recreate-not-just-a-restart-docker-restart-cannot-save-you)):
+```bash
+cd /volume1/docker/arr-stack
+docker compose -f docker-compose.arr-stack.yml up -d --dry-run prowlarr 2>&1 | grep -iE 'recreate|creat'
+docker compose -f docker-compose.arr-stack.yml up -d prowlarr
+```
+
+**See what UGOS did:** its update runs are logged in a root-only SQLite database:
+```bash
+sudo sqlite3 -readonly /volume1/@appstore/com.ugreen.docker/db/docker_info_log.db \
+  "select created_at, content from docker_log order by id desc limit 30;"
+```
 
 ## Apps Unreachable After a VPN Reconnect (Stale Network Namespace)
 
@@ -143,6 +205,65 @@ docker exec prowlarr wget -qO- http://127.0.0.1:8191/    # flaresolverr -> "read
 docker restart qbittorrent sabnzbd prowlarr flaresolverr   # or whichever started before gluetun
 ```
 
+## Torrents Stall Forever at 0% / `metaDL` (qBittorrent Not Bound to the Tunnel)
+
+**Symptom:** Every *new* torrent sits at 0% indefinitely — days, not hours — with `seeds=0 peers=0`, while magnets never resolve metadata (`metaDL`). Sonarr's queue shows `qBittorrent is downloading metadata`. Everything else looks perfectly healthy: qBittorrent is `Up (healthy)`, the WebUI loads, gluetun is `healthy`, indexer searches return plenty of releases, and **usenet downloads keep working normally**. Checking the trackers on a stuck torrent shows every announce failing:
+
+```
+udp://tracker.openbittorrent.com:6969   Operation not permitted
+http://tracker.opentrackr.org:1337      timed out
+```
+
+**Cause:** qBittorrent shares gluetun's network namespace, which contains four interfaces — `lo`, `eth0` (172.20.0.0/24 bridge), `eth1` (vpn-net) and `tun0` (the WireGuard tunnel). If no interface binding is configured, libtorrent announces from *every* address it can see. Gluetun's OUTPUT chain is `policy DROP` and only permits `eth0` traffic to local subnets, so every announce sourced from `eth0`/`eth1` is dropped with `EPERM` — surfacing as `Operation not permitted`.
+
+**Nothing leaks** — this is the kill-switch working exactly as designed — but nothing works either. No announce escapes, no peers are found, and the swarm is unreachable.
+
+Two things make this hard to spot:
+- **Usenet is unaffected.** SABnzbd talks plain HTTPS over the tunnel and never needs a peer connection, so it keeps importing happily. Only titles that fall back to torrents expose the fault.
+- **Every healthcheck passes.** The WebUI answers on localhost and the container's own health probe succeeds, so nothing goes red and `deunhealth` never fires.
+
+**Diagnose:**
+```bash
+# 1. Confirm the binding is empty (the fault) rather than tun0 (correct)
+docker exec qbittorrent grep -i Interface /config/qBittorrent/qBittorrent.conf
+# Expect: Session\Interface=tun0 and Session\InterfaceName=tun0
+# Fault:  no output at all
+
+# 2. Confirm which addresses libtorrent is actually announcing from.
+#    Look at "endpoints[].name" — if tun0's address is absent, this is the bug.
+docker exec gluetun ip -o addr show | awk '{print $2, $4}'   # note tun0's IP
+
+# 3. Prove the network itself is fine: a raw announce that lets the kernel
+#    route normally should get clean tracker replies from inside the netns.
+docker run --rm --network container:gluetun curlimages/curl:latest \
+  -s --max-time 20 https://api.ipify.org        # should print the VPN exit IP
+```
+
+**Fix (persistent, applied automatically):** `qbittorrent/custom-services.d/bind-vpn-interface` is mounted into the container. It waits for the WebUI, asserts the binding through the API, and re-checks every 5 minutes — so a rebuilt `qbittorrent-config` volume, or someone changing the setting by hand, self-heals within minutes. When it corrects the binding it also forces a re-announce, so stuck torrents recover immediately instead of waiting up to 30 minutes for their next scheduled announce.
+
+```bash
+docker compose -f docker-compose.arr-stack.yml up -d qbittorrent
+docker logs qbittorrent 2>&1 | grep bind-vpn-interface   # confirms what it set
+```
+
+> **Do not "simplify" this into a `custom-cont-init.d` script that edits `qBittorrent.conf` directly.** That was tried and fails: qBittorrent rewrites the config from its in-memory state at startup, so keys written before the daemon starts are silently discarded. Verified against throwaway volumes — a pre-start script lost `Session\InterfaceName` every time, and on an existing config lost *both* keys. The WebUI API after startup is the only reliable path. (No credentials needed: `WebUI\LocalHostAuth=false` and `127.0.0.0/8` is in `WebUI\AuthSubnetWhitelist`.)
+
+**Fix (manual, one-off)** — same change through the API, if you'd rather not recreate the container:
+```bash
+# Uses the qBittorrent WebUI API; QBIT_USER/QBIT_PASSWORD come from .env
+curl -s -c /tmp/qb -d "username=$QBIT_USER&password=$QBIT_PASSWORD" \
+  http://172.20.0.3:8085/api/v2/auth/login
+curl -s -b /tmp/qb -X POST http://172.20.0.3:8085/api/v2/app/setPreferences \
+  --data-urlencode 'json={"current_network_interface":"tun0","current_interface_address":""}'
+```
+
+Then force a re-announce so stuck torrents pick up peers immediately instead of waiting for their next scheduled announce:
+```bash
+curl -s -b /tmp/qb -X POST http://172.20.0.3:8085/api/v2/torrents/reannounce --data "hashes=all"
+```
+
+> **Note — binding to `tun0` is deliberately fail-closed.** If gluetun ever renames or drops the tunnel interface, qBittorrent goes *silent* rather than falling back to the bridge and leaking. That is the safe behaviour, but it presents as this exact symptom. So if torrents stop dead again, check `docker exec gluetun ip -o addr show` for a `tun0` before assuming the binding is wrong.
+
 ## NEVER Use `--remove-orphans` (Multi-Compose-File Project)
 
 This stack splits its services across several compose files (`docker-compose.arr-stack.yml`, `docker-compose.utilities.yml`, `docker-compose.traefik.yml`, …) that share **one project directory and project name**. To compose, any running container of the project that is not defined in the file you passed with `-f` is an *orphan*. So:
@@ -154,7 +275,7 @@ docker compose -f docker-compose.arr-stack.yml up -d --remove-orphans
 
 This happened for real on 2026-08-01 (~20:30 BST): a single `--remove-orphans` run removed **traefik, camera-listen, cloudflared, diun, uptime-kuma, beszel, beszel-agent, gluetun-recover, deunhealth, duc and configarr** in one stroke. Volumes and configs survived (downtime only), and everything had to be restored file by file.
 
-The same split has a second face: **recreate a service only via the file that defines it.** Attachments and settings that live in one file are silently dropped if the container is ever brought up through another path — e.g. traefik's `traefik-lan` macvlan (its `10.10.0.11` LAN presence) exists only in `docker-compose.traefik.yml`; a traefik container created without that file comes up bridge-only and **every `.lan` URL dies while the container still reports healthy** (also observed 2026-08-01).
+The same split has a second face: **recreate a service only via the file that defines it.** Attachments and settings that live in one file are silently dropped if the container is ever brought up through another path — e.g. traefik's `traefik-lan` macvlan (its `192.168.1.11` LAN presence) exists only in `docker-compose.traefik.yml`; a traefik container created without that file comes up bridge-only and **every `.lan` URL dies while the container still reports healthy** (also observed 2026-08-01).
 
 If you actually need to prune an orphan, remove that one container by name with `docker rm`.
 
@@ -289,7 +410,7 @@ sudo reboot
 
 **This is not the exit-128 problem above.** There, Pi-hole is *stopped* and the cause is obvious. Here it is *running and answering nobody*, which is far harder to spot — `docker ps`, health status and the Pi-hole UI all look normal.
 
-**Cause:** at boot the Docker **daemon** restores containers itself (`restart: always`) — compose is not involved, so no amount of `depends_on` affects it. Bindings pinned to a specific host IP fail to be established, and this Docker version logs it and starts the container anyway rather than refusing. Verified across three reboots on 2026-08-05: **pihole, baserow and therapybot — the only three containers pinned to `${NAS_IP}` — failed every time, while all 13 wildcard-bound containers were fine.** A single failed binding drops the container's *entire* mapping set, which is why Pi-hole also lost its `0.0.0.0:8081` web UI.
+**Cause:** at boot the Docker **daemon** restores containers itself (`restart: always`) — compose is not involved, so no amount of `depends_on` affects it. Bindings pinned to a specific host IP fail to be established, and this Docker version logs it and starts the container anyway rather than refusing. Verified across three reboots on 2026-08-05: **the only three containers pinned to `${NAS_IP}` — Pi-hole, plus two from a neighbouring compose project — failed every time, while all 13 wildcard-bound containers were fine.** A single failed binding drops the container's *entire* mapping set, which is why Pi-hole also lost its `0.0.0.0:8081` web UI.
 
 Pi-hole's healthcheck (`dig @127.0.0.1` *inside* the container) passes throughout, so neither `docker ps` nor `deunhealth` will ever flag this.
 
@@ -300,25 +421,27 @@ ss -tlnp | grep ':53 '                                      # only 127.0.0.1:53 
 dig @<NAS_IP> google.com                                    # "connection refused"
 ```
 
-**Fix (permanent):** `scripts/boot-compose-up.sh`, run at boot by `scripts/boot-compose-up.service`. It runs `docker compose up -d` across every deployed stack, which reconciles each container against its compose file and re-establishes the bindings. Deployed as:
+**Fix (permanent): run `docker compose up -d` across every stack at boot.** That reconciles each container against its compose file and re-establishes the bindings, which is precisely the step a `restart: always` misses. A one-shot systemd unit is the natural home for it.
 
-| Repo | On the NAS |
-|---|---|
-| `scripts/boot-compose-up.sh` | `/volume1/docker/boot-compose-up.sh` (symlink into this repo) |
-| `scripts/boot-compose-up.service` | `/etc/systemd/system/boot-compose-up.service` (`systemctl enable`) |
+This repo does **not** ship that script. Which stacks exist, where they live and what order they need is specific to your machine — the version that used to live here hardcoded a private inventory, which is no business of a public template. Orchestrating your own boxes is the operator's job. What is worth copying is the shape, and the four things that were learned painfully:
 
-DNS is back ~20s after boot (Pi-hole's stack is first in the list, deliberately); the full sweep takes ~5 minutes.
+1. **Wait for `dockerd` inside the script**, in a loop, before doing anything. `@reboot` and systemd both fire before Docker is accepting connections.
+2. **Order the stacks so DNS comes up first.** Pi-hole's file first means DNS is back ~20s after boot rather than after the full sweep, which takes ~5 minutes here.
+3. **Let one stack's failure not stop the rest.** DNS matters more than a photo library.
+4. **Never pass `--remove-orphans`** — see the entry above; it deletes the other compose files' containers.
 
-**Critical: use `Wants=`, never `Requires=` or `RequiresMountsFor=` in that unit.** The first version used `RequiresMountsFor=/volume1` + `Requires=docker.service`. Those are *hard* dependencies: `/volume1` wasn't mounted nine seconds into boot, so systemd failed the job outright (`Job boot-compose-up.service/start failed with result 'dependency'`) and **never retried**. DNS stayed down and the unit sat `inactive (dead)` with no error visible in `systemctl status`. The unit now waits for the script itself in `ExecStart`.
+DNS is back ~20s after boot (Pi-hole's stack first, deliberately); the full sweep takes ~5 minutes.
+
+**Critical: use `Wants=`, never `Requires=` or `RequiresMountsFor=` in that unit.** The first version here used `RequiresMountsFor=/volume1` + `Requires=docker.service`. Those are *hard* dependencies: `/volume1` wasn't mounted nine seconds into boot, so systemd failed the job outright (`Job boot-compose-up.service/start failed with result 'dependency'`) and **never retried**. DNS stayed down and the unit sat `inactive (dead)` with no error visible in `systemctl status`. Make the unit wait for its own preconditions in `ExecStart` instead — UGOS mounts `/volume1` outside systemd's view, so the only reliable test is the file itself.
 
 **A static IP does NOT fix this** (unlike the exit-128 case above). UGOS reverts the Control Panel setting to DHCP on reboot, and `/etc/network/interfaces.d/ifcfg-eth0` has declared `static` since February while UGOS's own `dhclient@eth0.service` overrides it regardless.
 
-**Manual repair**, if the unit is ever missing or you need DNS back now — no root required, `mooseadmin` is in the `docker` group:
+**Manual repair**, if you need DNS back right now — no root required, as long as your user is in the `docker` group. Run it against the DNS stack first, then the rest:
 ```bash
-sh /volume1/docker/boot-compose-up.sh
+cd /volume1/docker/arr-stack && docker compose -f docker-compose.arr-stack.yml up -d
 ```
 
-**Reading boot logs:** `mooseadmin` must be in the `systemd-journal` group or `journalctl` silently returns nothing, which reads exactly like "no logs" rather than "no permission" — that mistake cost an hour of diagnosis. `sudo usermod -aG systemd-journal mooseadmin`.
+**Reading boot logs:** `nasadmin` must be in the `systemd-journal` group or `journalctl` silently returns nothing, which reads exactly like "no logs" rather than "no permission" — that mistake cost an hour of diagnosis. `sudo usermod -aG systemd-journal nasadmin`.
 
 ## Pi-hole: Gravity Update Fails With Empty Status
 
@@ -348,29 +471,61 @@ docker exec pihole pihole -g   # confirm both lists succeed
 
 Current Pi-hole versions chown files back to `pihole` after each gravity run, so once corrected this shouldn't recur.
 
+## Seerr: Request Stuck for Weeks While the Release Exists (Three Naming Authorities)
+
+**Symptom:** A Seerr request shows *Processing* (or *Partially Available*) for weeks. Seerr's log says Sonarr or Radarr accepted it. Sonarr or Radarr shows the title, healthy. Nothing is in any queue, nothing has errored anywhere, and the release is on the indexers: a Prowlarr search finds it in seconds.
+
+**Cause:** Three services name the same programme three ways, and nothing checks that a request resolved into monitored, findable episodes. Seerr follows TMDB, Sonarr follows TVDB, and the release groups follow neither. In September 2026 ITV's two-part *70 Up* hit every failure mode at once and sat five weeks while EZTV and NZBgeek had both parts at 1080p:
+
+1. **A TMDB *movie* entry for a TV broadcast.** Seerr sent it to Radarr. Radarr marked it available and searched every night for a film-shaped release that can never exist: zero results, zero history, zero errors, Seerr *Processing* for ever.
+2. **A duplicate TMDB TV entry with no TVDB link** and a single "season 10". Seerr sent Sonarr `seasons: [10]`. Sonarr's TVDB record numbers the show's seasons by year (1964 … 2026), so season 10 matched nothing, every season stayed unmonitored, and Seerr logged "Sonarr accepted request".
+3. **Release groups name it `70.Up.S10E01`**, while Sonarr knows the show as *The Up Series* with no scene mapping. Even with a season monitored by hand, Sonarr's own search returned 0.
+
+The commonest cause turned out to be none of these. **Sonarr and Radarr only grab from their RSS sync; neither ever searches the backlog.** A release that RSS missed, because the indexer was in failure backoff that hour or the post fell outside the sync window, is never found until someone clicks Search. Two films sat 130 and 171 days with approved releases on NZBgeek since July; one `MoviesSearch` command grabbed and imported both within 30 seconds.
+
+**Diagnose:** the daily check names each stuck request and what to do; run it by hand with the requests it judged fine included:
+
+```bash
+./scripts/check-stuck-requests.sh -v
+```
+
+For a never-grabbed title it runs the app's own release search and says which case you have: a release it would take (RSS missed it), releases it rejects (with the reasons), nothing while an indexer is in backoff (don't trust the zero), or nothing at all, sorted by a Prowlarr search for the title. Searches are spaced and capped: a burst of fifteen interactive searches put NZBgeek and EZTV into Prowlarr's five-minute backoff and every search in that window returned 0, which reads exactly like "no indexer carries it". `GET /api/v1/indexerstatus` on Prowlarr is empty when no indexer is backed off.
+
+For one request by hand: open the title in Seerr and follow *Manage* to the Sonarr or Radarr entry it points at. In Sonarr, check which seasons are monitored and whether the requested season number exists at all. In Radarr, an empty *History* tab on an "available" movie means it has never found a single release.
+
+**Fix:**
+- *RSS missed it:* `./scripts/check-stuck-requests.sh --apply` queues the search, or click Search on the title in Sonarr or Radarr.
+- *Wrong season numbering:* re-request from the TVDB-linked entry (Seerr's search often lists the show twice; the right entry carries a TVDB id and the full season list), or monitor the right season in Sonarr and search it.
+- *TV broadcast in Radarr:* delete it from Radarr and from Seerr's requests, and request the series instead.
+- *Indexers name it differently:* find the release in Prowlarr and push it to Sonarr, or download it and import it by hand (Sonarr → Wanted → Manual Import).
+
+**Prevention:** `scripts/check-stuck-requests.sh --post --apply` runs daily from cron: it posts a panel notice the day a request passes its threshold (three days for TV, seven for a movie) and queues the search for anything RSS missed. Setup in [MAINTENANCE.md § Stuck Requests](MAINTENANCE.md#stuck-requests).
+
 ## Seerr: "/app/config volume mount was not configured properly"
 
-**Symptom:** Seerr container starts but logs `The /app/config volume mount was not configured properly` (or similar) and the web UI is unreachable.
+**Symptom:** Seerr's setup wizard (or its settings pages) shows a banner: *The /app/config volume mount was not configured properly. All data will be cleared when the container is stopped or restarted.*
 
-**Cause:** Seerr does a strict check on `/app/config` at startup and is fussier than Jellyseerr was. Usually triggered by a half-initialised `seerr-config` volume from an interrupted earlier start — failed `up -d`, container OOM, Ctrl+C mid-init, etc.
+**Cause:** A false alarm; your data is in the `seerr-config` volume and survives restarts. Seerr's only check is whether a file called `/app/config/DOCKER` exists. The image ships that marker so a missing mount gets noticed, but Docker copies image contents into a new named volume, marker included. Up to v1.13.4 every fresh install saw the banner.
 
 **Diagnose:**
 ```bash
-docker logs seerr --tail 30
+docker exec seerr ls /app/config   # DOCKER in the list = this
 ```
 
-**Fix:** Wipe and re-init the volume.
+**Fix:** From v1.13.5 the compose file deletes the marker each time Seerr starts. Pull and recreate Seerr:
 
 ```bash
-docker compose -f docker-compose.arr-stack.yml stop seerr
-docker volume rm arr-stack_seerr-config
+git pull
 docker compose -f docker-compose.arr-stack.yml up -d seerr
-docker logs seerr --tail 30
 ```
 
-> **⚠️ Destructive.** Safe on a fresh install before you've configured Seerr. Once you've added Sonarr/Radarr connections, users, or requests, this wipes them — back up `/var/lib/docker/volumes/arr-stack_seerr-config/_data/` first if you need to preserve state.
+On an older checkout, delete it by hand; reload the page and the banner is gone:
 
-If a fresh wipe still hits the same error, post `docker logs seerr` output as a GitHub issue.
+```bash
+docker exec seerr rm /app/config/DOCKER
+```
+
+Don't wipe the volume to fix this. A new volume gets the marker copied in again, and you lose your Seerr settings. If Seerr's web UI won't load at all, that's a different problem: start with `docker logs seerr --tail 30`.
 
 ## Jellyfin: Video Stutters/Freezes Every Few Minutes
 

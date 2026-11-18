@@ -55,7 +55,8 @@ Decide how you'll access your media stack:
 - **SSH access** to your NAS (enable in NAS settings)
 - **VPN Subscription** - Any provider supported by [Gluetun](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) (Surfshark, NordVPN, PIA, Mullvad, ProtonVPN, etc.)
 - **Usenet Provider** (optional, ~$4-6/month) - Frugal Usenet, Newshosting, Eweka, etc.
-- **Usenet Indexer** (optional) - NZBGeek (~$12/year) or DrunkenSlug (free tier)
+- **Usenet Indexer** (optional) - NZBGeek (~$12/year) is the reliable choice. DrunkenSlug opens
+  registration only periodically, so treat it as "if you can get in", not as a plan
 
 > **Why Usenet?** More reliable than public torrents (no fakes), faster downloads, SSL-encrypted (no VPN needed). See [SABnzbd setup](APP-CONFIG.md#43-sabnzbd-usenet-downloads).
 
@@ -106,8 +107,9 @@ Decide how you'll access your media stack:
 **Files you DON'T edit:**
 - `docker-compose.*.yml` - Work as-is, configured via `.env`
 - `pihole/dnsmasq.d/02-local-dns.conf` - Generated from example via sed command
+- `dnscrypt-proxy/dnscrypt-proxy.toml` - dnscrypt-proxy's config: the image default plus a denylist of DNS64 resolvers
 - `traefik/dynamic/tls.yml` - Security defaults
-- `traefik/dynamic/local-services.yml` - Auto-generates from `.env`
+- `traefik/dynamic/local-services.yml` - Ready-made `.lan` routes to the fixed container IPs (reads nothing from `.env`)
 
 ### Docker Compose Files
 
@@ -147,11 +149,11 @@ Add this to `docker-compose.arr-stack.yml` (add `plex-config` to the `volumes:` 
       - /dev/dri:/dev/dri
     volumes:
       - plex-config:/config
-      - ${MEDIA_ROOT}/movies:/media/movies:ro
-      - ${MEDIA_ROOT}/tv:/media/tv:ro
+      - ${MEDIA_ROOT}/media/movies:/media/movies:ro
+      - ${MEDIA_ROOT}/media/tv:/media/tv:ro
     networks:
       arr-stack:
-        ipv4_address: 172.20.0.11
+        ipv4_address: 172.20.0.7  # not used by any stack service
     restart: always
     logging: *default-logging
     healthcheck:
@@ -219,6 +221,8 @@ sudo chown -R 1000:1000 "$NAS_STACK_DIR"
 ```
 
 **Note:** Service configs are stored in Docker named volumes (auto-created on first run). Docker commands on Ugreen NAS need `sudo` by default — to skip that, add your user to the `docker` group once: `sudo usermod -aG docker $USER`, then log out of SSH and back in. After that, plain `docker` and `docker compose` work without `sudo`.
+
+**Turn off UGOS's Docker auto-update.** In the **Docker** app → **Management** → **Image update**, untick **Update detection** and click **Apply**. When it's on, UGOS updates containers itself every week. It can't rebuild a container that shares gluetun's network, so it deletes Prowlarr, qBittorrent or SABnzbd and fails to create the replacement. This stack pins its image versions in the compose files; update through the repo instead. Details: [TROUBLESHOOTING.md](TROUBLESHOOTING.md#indexers-all-unavailable-every-monday-morning-ugos-docker-auto-update).
 
 <details>
 <summary><strong>Note on UGOS Antivirus</strong></summary>
@@ -565,7 +569,7 @@ Service configs are stored in Docker named volumes. Run periodic backups:
 ./scripts/arr-backup.sh --tar
 ```
 
-Creates a ~13MB tarball of essential configs (VPN settings, indexers, request history, etc.).
+Creates a tarball (~66MB on a mid-sized library) of essential configs (VPN settings, indexers, request history, etc.) and the Sonarr, Radarr and Jellyfin databases.
 
 See **[Backup & Restore](BACKUP.md)** for full details on what's backed up, restore procedures, and automation.
 

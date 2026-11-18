@@ -1,6 +1,6 @@
 # Pharkie's Ultimate Arr Stack for Ugreen and Beyond
 
-[![GitHub release](https://img.shields.io/github/v/release/Pharkie/ultimate-arr-stack)](https://github.com/Pharkie/ultimate-arr-stack/releases)
+[![GitHub release](https://img.shields.io/github/v/release/Pharkie/ultimate-arr-stack)](https://github.com/Pharkie/ultimate-arr-stack/releases) [![CI](https://github.com/Pharkie/ultimate-arr-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/Pharkie/ultimate-arr-stack/actions/workflows/ci.yml)
 
 <img align="right" width="45%" src="docs/images/demo/demo.gif">
 
@@ -83,7 +83,7 @@ This code was generated with [Claude Code](https://claude.ai/claude-code) (Anthr
 
 ## License
 
-Documentation, configuration files, and examples in this repository are licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) (Attribution-NonCommercial). Individual software components (Sonarr, Radarr, Jellyfin, etc.) retain their own licenses.
+[PolyForm Noncommercial 1.0.0](LICENSE)
 
 ## Acknowledgments
 

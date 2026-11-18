@@ -2,7 +2,7 @@
 # TAILSCALE - Remote access to your full LAN via mesh VPN
 #
 # What it does:
-# - Acts as a subnet router: advertises your LAN (e.g. 10.10.0.0/24) to your
+# - Acts as a subnet router: advertises your LAN (e.g. 192.168.1.0/24) to your
 #   Tailscale tailnet so phones/laptops can reach Pi-hole, *.lan domains,
 #   Home Assistant, NAS admin UIs, etc. from anywhere.
 # - Traverses CGNAT (no port-forward needed) and falls back to a relay over
@@ -31,6 +31,13 @@ services:
     # network_mode: host is required for subnet routing — the daemon needs
     # to see the host's LAN interface to advertise/route its subnet.
     network_mode: host
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # NET_ADMIN: create the tun device, routes and ip rules. NET_RAW: the
+    # image's iptables is the legacy build, which needs a raw socket to add
+    # the subnet-router/exit-node rules (without it they fail silently).
     cap_add:
       - NET_ADMIN
       - NET_RAW
@@ -51,7 +58,10 @@ services:
       - TS_AUTHKEY=${TS_AUTHKEY:-}
       # Advertises your LAN subnet (LAN_SUBNET from .env) so tailnet peers can
       # reach the whole network. Add extra subnets with TS_EXTRA_ROUTES if needed.
-      - TS_EXTRA_ARGS=--advertise-routes=${LAN_SUBNET}${TS_EXTRA_ROUTES:+,${TS_EXTRA_ROUTES}} --accept-routes
+      # --advertise-exit-node lets a tailnet device send all its internet traffic
+      # out through this NAS, not just LAN traffic. It stays switched off until you
+      # approve it in the Tailscale admin console; see docs/TAILSCALE.md.
+      - TS_EXTRA_ARGS=--advertise-routes=${LAN_SUBNET}${TS_EXTRA_ROUTES:+,${TS_EXTRA_ROUTES}} --accept-routes --advertise-exit-node
     healthcheck:
       test: ["CMD", "tailscale", "status", "--peers=false"]
       interval: 30s
@@ -65,5 +75,11 @@ services:
         max-size: "10m"
         max-file: "3"
 
+# Pinned like the volumes in docker-compose.arr-stack.yml. This file does set
+# an explicit `name: tailscale` above, so it is already safe from a deploy
+# directory rename — but not from someone editing that `name:` value, which
+# would silently point this at a fresh empty volume and de-authenticate the
+# node (losing the machine's Tailscale identity and its exit-node approval).
 volumes:
   tailscale-state:
+    name: tailscale_tailscale-state

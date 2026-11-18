@@ -8,7 +8,7 @@
 > **Tip:** When doing full stack restarts, use mobile hotspot first, or restart with a single command:
 > ```bash
 > docker compose -f docker-compose.arr-stack.yml up -d  # Recreates without full down
-> # Add `-f docker-compose.utilities.yml` after the first `-f` if you also run utilities (beszel, configarr, etc.)
+> # Add `-f docker-compose.utilities.yml` after the first `-f` if you also run utilities (beszel, uptime-kuma, etc.)
 > ```
 
 ## Service Access
@@ -46,6 +46,7 @@
 | Radarr | 172.20.0.11 | 7878 | Movies (own IP — not via VPN) |
 | Jellyfin | 172.20.0.4 | 8096 | Media server |
 | Pi-hole | 172.20.0.5 | 8081 | DNS ad-blocking (`/admin`) |
+| dnscrypt-proxy | 172.20.0.6 | — | Encrypted upstream DNS for Pi-hole (`172.20.0.6#5053`, no UI) |
 | Seerr | 172.20.0.8 | 5055 | Request management |
 | Bazarr | 172.20.0.9 | 6767 | Subtitles |
 | ↳ FlareSolverr | (via Gluetun) | 8191 | Cloudflare bypass (inactive until added as an Indexer Proxy in Prowlarr — see [APP-CONFIG.md](APP-CONFIG.md#46-prowlarr-indexer-manager)) |
@@ -75,8 +76,7 @@
 | Uptime Kuma | 172.20.0.13 | 3001 | Service monitoring |
 | duc | 172.20.0.14 | 8838 | Disk usage |
 | Beszel | 172.20.0.15 | 8090 | System monitoring |
-| DIUN | 172.20.0.16 | — | Image update notifier (no UI) |
-| Configarr | — | — | TRaSH Guides sync (one-shot, no UI) |
+| Configarr | — | — | TRaSH Guides sync (one-shot, no UI, `manual` profile) |
 
 ### Service Connection Guide
 
@@ -90,8 +90,10 @@
 | Radarr | qBittorrent | `gluetun:8085` | Download client is behind the VPN |
 | Sonarr | SABnzbd | `gluetun:8080` | Download client is behind the VPN |
 | Radarr | SABnzbd | `gluetun:8080` | Download client is behind the VPN |
-| Prowlarr | Sonarr | `sonarr:8989` | Sonarr is on the bridge (own IP) |
-| Prowlarr | Radarr | `radarr:7878` | Radarr is on the bridge (own IP) |
+| Prowlarr | Sonarr | `172.20.0.10:8989` | Sonarr is on the bridge; Prowlarr's DNS is Pi-hole, which can't resolve container names — use the static IP |
+| Prowlarr | Radarr | `172.20.0.11:7878` | Same — static IP, not the name |
+| Prowlarr | qBittorrent | `localhost:8085` | Prowlarr's own client for search-page grabs (category `other`); same network stack |
+| Prowlarr | SABnzbd | `localhost:8080` | Same — Prowlarr's own client, category `other` |
 | Prowlarr | FlareSolverr | `localhost:8191` | Same network stack (both behind Gluetun) |
 | Seerr | Sonarr | `sonarr:8989` | Both on the bridge |
 | Seerr | Radarr | `radarr:7878` | Both on the bridge |
@@ -100,6 +102,25 @@
 | Bazarr | Radarr | `radarr:7878` | Both on the bridge |
 
 > **Reaching VPN-side services from the bridge:** use the `gluetun` hostname (or `172.20.0.3`) — qBittorrent/SABnzbd/Prowlarr listen inside gluetun's namespace, so they have no Docker DNS name of their own. Gluetun's `FIREWALL_OUTBOUND_SUBNETS` includes `172.20.0.0/24`, so Prowlarr (in the VPN namespace) can reach Sonarr/Radarr on the bridge.
+
+> **Never point a container at a `.lan` name.** Those names all resolve to Traefik's
+> **macvlan** address (`192.168.1.11` in these docs). A macvlan interface is deliberately
+> unreachable from the container bridge on the same host, so *every* `.lan` URL fails from
+> inside a container — with IPv4 forced, and regardless of which `.lan` name it is. The
+> names are for browsers on your LAN, not for service-to-service configuration.
+>
+> This bites hardest in webhook and notification fields, where nothing validates the URL and
+> the only symptom is a health check going red days later:
+>
+> ```
+> # from inside Sonarr
+> curl http://homeassistant.lan:8123/api/webhook/...  → http=000   (Traefik's macvlan, and
+>                                                                   Traefik isn't on 8123)
+> curl http://192.168.1.20:8123/api/webhook/...       → http=200   (the device itself)
+> ```
+>
+> Address external devices by IP and their real port. Address other stack services by the
+> table above.
 
 ## Common Commands
 
@@ -126,7 +147,7 @@ docker compose -f docker-compose.arr-stack.yml up -d --force-recreate
 docker compose -f docker-compose.arr-stack.yml pull
 docker compose -f docker-compose.arr-stack.yml up -d
 
-# If you also run utilities (beszel, configarr, etc.), add -f docker-compose.utilities.yml to both commands
+# If you also run utilities (beszel, uptime-kuma, etc.), add -f docker-compose.utilities.yml to both commands
 ```
 
 > ⚠️ **Never use `docker compose down` (+ local DNS users)** - if your router uses Pi-hole for DNS, stopping it kills DNS for your entire network. Use `up -d --force-recreate` instead.
@@ -136,7 +157,7 @@ docker compose -f docker-compose.arr-stack.yml up -d
 | Network | Subnet | Purpose |
 |---------|--------|---------|
 | arr-stack | 172.20.0.0/24 | Service communication |
-| vpn-net | 10.8.1.0/24 | Internal VPN routing (WireGuard peers) |
+| vpn-net | 10.8.1.0/24 | Gluetun's second network; no other service joins it |
 | traefik-lan | (your LAN)/24 | macvlan for .lan domains (+ local DNS only) |
 
 > **Note:** `docker compose up` shows these as `arr-stack`, `arr-stack_vpn-net`, and `arr-stack_traefik-lan`. The `arr-stack_` prefix is normal — Docker adds the project name to networks that don't have an explicit `name:` set.
@@ -145,13 +166,13 @@ docker compose -f docker-compose.arr-stack.yml up -d
 
 Services start in dependency order (handled automatically by `depends_on`):
 
-1. **Pi-hole** → DNS ready (for containers; optionally your LAN)
+1. **dnscrypt-proxy, then Pi-hole** → DNS ready (for containers; optionally your LAN)
 2. **Gluetun** → VPN connected (uses Pi-hole for internal DNS)
 3. **Prowlarr, qBittorrent, SABnzbd** → VPN-protected services (behind Gluetun)
 4. **Sonarr, Radarr** → bridge services (own IPs, not via VPN); reach the download clients via `gluetun`
 5. **Seerr, Bazarr** → connect to Sonarr/Radarr by bridge hostname (`sonarr`/`radarr`)
 6. **FlareSolverr** → Cloudflare bypass (via Gluetun, shares VPN with Prowlarr)
-6. **Jellyfin, WireGuard** → Independent, start anytime
+7. **Jellyfin** → Independent, starts anytime
 
 ## Compose Files
 
@@ -169,7 +190,7 @@ Services start in dependency order (handled automatically by `depends_on`):
 | Bazarr | Subtitles |
 | Gluetun | VPN gateway |
 | Pi-hole | DNS/ad-blocking |
-| WireGuard | VPN server |
+| dnscrypt-proxy | Encrypted upstream DNS for Pi-hole |
 | FlareSolverr | CAPTCHA bypass |
 
 ### `docker-compose.traefik.yml` (+ local DNS)
@@ -195,8 +216,8 @@ Services start in dependency order (handled automatically by `depends_on`):
 | Service | Description |
 |---------|-------------|
 | deunhealth | Auto-restart on VPN reconnect |
+| gluetun-recover | Restarts VPN-side services left dead or stale by a gluetun restart |
 | Uptime Kuma | Service uptime monitoring |
 | duc | Disk usage treemap |
-| Beszel | System metrics (CPU, RAM, disk, containers) |
-| DIUN | Docker image update notifications |
-| Configarr | TRaSH Guides quality profile sync (one-shot) |
+| Beszel | System metrics (CPU, RAM, disk, containers); hub plus `beszel-agent` |
+| Configarr | TRaSH Guides quality profile sync (one-shot, `manual` profile: only runs via `run --rm configarr`) |

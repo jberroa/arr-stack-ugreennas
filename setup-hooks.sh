@@ -1,43 +1,56 @@
 #!/bin/bash
-# Setup script for pre-commit hooks
-# Run once after cloning: ./setup-hooks.sh
+# Installs this repo's pre-commit hook. Run once per clone: ./setup-hooks.sh
+#
+# Generated with LLM assistance and human-reviewed. Read it before you run it.
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOKS_DIR="$SCRIPT_DIR/.git/hooks"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOK_SRC="$REPO/scripts/pre-commit"
 
-echo "Setting up git hooks for ultimate-arr-stack..."
+echo "Installing git hooks for ultimate-arr-stack..."
 echo ""
 
-# Check we're in a git repo
-if [[ ! -d "$SCRIPT_DIR/.git" ]]; then
-    echo "ERROR: Not a git repository. Run this from the repo root."
+# Let git say where hooks go. Every worktree of a clone shares the hooks of the
+# main .git directory, and inside a worktree .git is just a pointer file, so a
+# test for a .git directory would wrongly give up there.
+if ! COMMON_GIT_DIR="$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+    echo "ERROR: $REPO is not inside a git clone."
     exit 1
 fi
-
-# Create hooks directory if needed
+HOOKS_DIR="$COMMON_GIT_DIR/hooks"
 mkdir -p "$HOOKS_DIR"
 
-# Remove existing hook if present
-if [[ -e "$HOOKS_DIR/pre-commit" ]]; then
-    rm "$HOOKS_DIR/pre-commit"
-    echo "  Removed existing pre-commit hook"
+# Link by full path, so the hook resolves the same from any worktree and always
+# runs the current scripts/pre-commit. -f replaces an old hook or copy.
+ln -sfn "$HOOK_SRC" "$HOOKS_DIR/pre-commit"
+echo "  Linked $HOOKS_DIR/pre-commit -> $HOOK_SRC"
+
+chmod +x "$HOOK_SRC" "$REPO"/scripts/lib/*.sh
+echo "  Made the hook and its checks executable"
+
+# ---------------------------------------------------------------------------
+# PyYAML, for the hook's YAML syntax check.
+#
+# If the system python3 already has it (most Linux, including the NAS), do
+# nothing. Otherwise build a repo-local .venv — macOS ships an
+# externally-managed Python (PEP 668) that refuses `pip install`, which is why
+# the check used to run degraded on exactly the machine where commits happen.
+# ---------------------------------------------------------------------------
+if python3 -c "import yaml" 2>/dev/null; then
+    echo "  PyYAML: already available via system python3"
+elif [[ -x "$REPO/.venv/bin/python3" ]] && "$REPO/.venv/bin/python3" -c "import yaml" 2>/dev/null; then
+    echo "  PyYAML: already available via .venv"
+elif python3 -m venv "$REPO/.venv" 2>/dev/null &&
+     "$REPO/.venv/bin/pip" install --quiet pyyaml 2>/dev/null; then
+    echo "  PyYAML: installed into .venv (gitignored)"
+else
+    echo "  WARNING: could not provide PyYAML."
+    echo "           The hook will fall back to 'docker compose config', or"
+    echo "           report YAML validation as SKIPPED if that is missing too."
 fi
 
-# Create symlink (relative path so it works if repo is moved)
-ln -s "../../scripts/pre-commit" "$HOOKS_DIR/pre-commit"
-echo "  Created symlink: .git/hooks/pre-commit -> scripts/pre-commit"
-
-# Ensure scripts are executable
-chmod +x "$SCRIPT_DIR/scripts/pre-commit"
-chmod +x "$SCRIPT_DIR/scripts/lib/"*.sh
-echo "  Made scripts executable"
-
 echo ""
-echo "Done! Pre-commit hook installed."
-echo ""
-echo "The hook will run automatically on 'git commit'."
-echo "To test manually: ./scripts/pre-commit"
-echo ""
-echo "To uninstall: rm .git/hooks/pre-commit"
+echo "Done. The hook now runs on every 'git commit'."
+echo "Run it by hand: ./scripts/pre-commit"
+echo "Remove it:      rm \"$HOOKS_DIR/pre-commit\""

@@ -11,6 +11,7 @@ docker compose -f docker-compose.utilities.yml up -d
 | Service | Description | Access |
 |---------|-------------|--------|
 | **deunhealth** | Auto-restarts services when VPN recovers | Internal |
+| **gluetun-recover** | Restarts VPN-side services that a gluetun restart left exited or on a dead network namespace | Internal |
 | **Uptime Kuma** | Service monitoring dashboard | http://uptime.lan |
 | **Beszel** | System metrics (CPU, RAM, disk, containers) | http://beszel.lan |
 | **duc** | Disk usage analyzer (treemap UI) | http://duc.lan |
@@ -39,6 +40,86 @@ docker exec uptime-kuma sqlite3 /app/data/kuma.db "UPDATE monitor SET name='NewN
 # Restart to pick up DB changes
 docker restart uptime-kuma
 ```
+
+### The VPN check, and why it is a push monitor
+
+`scripts/check-vpn.sh` runs from cron every 5 minutes and pings a Kuma **push**
+monitor named `VPN Check` on success only. Kuma raises the alarm when the pings
+stop.
+
+That inversion is the point. An HTTP monitor asks "is the service answering?",
+which a leaking or unmeasurable VPN answers perfectly well. A push monitor asks
+"did the check run and pass?", so it also catches the case an HTTP monitor never
+can: the check itself not running. A dead cron and a healthy VPN look identical
+to everything else on this page.
+
+```bash
+# Create the push monitor (token is yours; generate a fresh 32-char one)
+TOKEN=$(head -c 24 /dev/urandom | md5sum | cut -c1-32)
+docker exec uptime-kuma sqlite3 /app/data/kuma.db \
+  "INSERT INTO monitor (name, active, type, interval, retry_interval, maxretries, \
+   push_token, user_id, upside_down, accepted_statuscodes_json, method, description) \
+   VALUES ('VPN Check', 1, 'push', 600, 60, 1, '$TOKEN', 1, 0, '[\"200-299\"]', 'GET', \
+   'check-vpn.sh has stopped passing. Its FAIL lines are in logs/check-vpn.log in the stack directory.');"
+
+# Attach your notification so it can actually reach you (id 1 = your default;
+# set it up as in HOME-ASSISTANT.md, step 2, or the alert reaches nothing)
+MID=$(docker exec uptime-kuma sqlite3 /app/data/kuma.db "SELECT id FROM monitor WHERE name='VPN Check';")
+docker exec uptime-kuma sqlite3 /app/data/kuma.db \
+  "INSERT INTO monitor_notification (monitor_id, notification_id) VALUES ($MID, 1);"
+
+docker restart uptime-kuma
+echo "push URL: http://localhost:3001/api/push/$TOKEN"
+```
+
+The cron entry pushes only when the script exits 0, and logs the output when it
+does not:
+
+```cron
+*/5 * * * * /path/to/arr-stack/scripts/check-vpn.sh > /tmp/check-vpn.last 2>&1 && curl -fsS -m 10 "http://localhost:3001/api/push/YOUR_TOKEN?status=up&msg=OK" > /dev/null || { echo "--- $(date) ---"; cat /tmp/check-vpn.last; } >> /path/to/arr-stack/logs/check-vpn.log
+```
+
+The monitor interval is 600s against a 300s cron, so one slow or missed run does
+not page you; two consecutive failures do.
+
+**Making the notice say what is wrong.** With only that cron line, Kuma's down
+notice says "No heartbeat in the time window", which names no cause. Put the
+same push URL in `.env`, without its query, and a failing run also pushes
+`status=down` with its first FAIL line:
+
+```bash
+VPN_CHECK_PUSH_URL=http://localhost:3001/api/push/YOUR_TOKEN
+```
+
+When gluetun cannot get out at all, that first line is the cause, read from
+gluetun's own log and the host probe:
+
+| What the check sees | What it says |
+|---|---|
+| gluetun restarting for 5+ min, several servers, none answering, host fine | "No VPN server has answered for 25 h across 7 servers (14,035 attempts). Most likely the Surfshark subscription has expired or the WireGuard key was revoked: check my.surfshark.com. If the account is active, check that outbound UDP 51820 is not blocked." ([TROUBLESHOOTING.md](TROUBLESHOOTING.md#vpn-no-server-answers-expired-subscription-revoked-key-or-blocked-udp)) |
+| the same, under 5 min | "The VPN has not connected for 3 min (…). Too soon to rule out a passing outage; if it lasts, check the Surfshark subscription (my.surfshark.com) first, then outbound UDP 51820" |
+| one server only, 5+ min | "VPN server … has not answered for 30 min (…) and gluetun has tried no other. If the server selection allows only that one, widen it …" |
+| the host can't get out either | "The NAS's own connection is failing too (…), so this is not the VPN: check the internet connection and DNS (Pi-hole) first" |
+
+Why 5 minutes and not longer: Kuma sends its down notice once, on the second
+failing run (`maxretries` 1), 5 to 10 minutes into an outage, and never again
+while the monitor stays down. A longer threshold would leave the notice with
+the hedged line. By 5 minutes gluetun, retrying every ~6 s, has made about 45
+attempts and tried every server in a country several times over. A blip ends
+on its next attempt: in two months of one install's gluetun log, every other
+restart was a single one, with the tunnel working again within seconds.
+`VPN_NO_ANSWER_MINUTES` moves the line.
+
+The success push stays in the cron line, so a check that cannot run at all
+still stops the pings.
+
+> **Installing the crontab needs root on UGOS.** `crontab <file>` writes its temp
+> file into `/var/spool/cron/`, which the admin user cannot write, so it fails
+> with `mkstemp: Permission denied`. Writing
+> `/var/spool/cron/crontabs/<user>` directly *appears* to work — the file is
+> owned by the user — but cron never reloads it, and the entry silently never
+> runs. Verify with a `* * * * * date >> /tmp/canary.log` entry before trusting
+> it. Use `sudo crontab -u <user> <file>`.
 
 **Recommended monitors** (matching what the pre-commit check expects):
 
@@ -89,6 +170,8 @@ docker compose -f docker-compose.utilities.yml up -d beszel-agent
 
 Configarr syncs [TRaSH Guides](https://trash-guides.info/) quality profiles and custom formats to Sonarr and Radarr. It runs once and exits — no persistent service, no web UI.
 
+It only runs when you ask for it. `docker compose -f docker-compose.utilities.yml up -d` skips it, because it sits in a `manual` compose profile. A run creates the quality profiles its config names and, with `reset_unmatched_scores` on (as in the example), zeroes any custom-format score on those profiles that the config doesn't list, including ones you set by hand.
+
 **1. Copy the example config:**
 ```bash
 cp configarr/config.yml.example configarr/config.yml
@@ -101,7 +184,7 @@ RADARR_API_KEY=your_radarr_api_key
 ```
 Find these in Sonarr/Radarr → Settings → General → API Key.
 
-**3. Edit `configarr/config.yml`** — uncomment the template set you want (e.g., `sonarr-v4-quality-profile-web-1080p`). Browse available templates at the [recyclarr config-templates repo](https://github.com/recyclarr/config-templates).
+**3. Edit `configarr/config.yml`** — as shipped it creates a `WEB-2160p` profile in Sonarr and a `UHD Bluray + WEB` profile in Radarr, both with a 1080p fallback; the comments name the 1080p-only templates if you'd rather have those. Browse available templates at the [recyclarr config-templates repo](https://github.com/recyclarr/config-templates).
 
 **4. Preview changes (dry run):**
 ```bash
