@@ -696,7 +696,7 @@ services:
     restart: always
     logging: *default-logging
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
       interval: 1m
       timeout: 10s
       retries: 3
