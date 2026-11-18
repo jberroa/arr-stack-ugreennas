@@ -11,6 +11,20 @@ Docker media stack for Ugreen NAS. Edit NAS files (like `pihole/dnsmasq.d/02-loc
 - **Local dev repo**: your clone of this repo
 - **NAS deploy path**: `/volume1/docker/arr-stack/`
 
+## Upstream Fork
+
+This repo is a **private fork** of a public upstream template. Custom changes (gluetun credentials, dashboard, Traefik routes, etc.) live on `main` here and must never be pushed to the upstream.
+
+To pull upstream improvements without losing customizations:
+
+```bash
+git fetch upstream
+git merge upstream/main --no-ff
+# resolve any conflicts in favour of our customizations, then push
+```
+
+Check upstream for version bumps, new service additions, and network/compose changes before merging — conflicts in `docker-compose.arr-stack.yml` and `traefik/dynamic/local-services.yml` are likely and must be resolved manually.
+
 ## Cross-Stack: a neighbouring compose project shares this network
 
 This NAS runs other compose projects besides this one. At least one of them has its own network *and* joins `arr-stack` with the **static IP 172.20.0.20**, so Traefik can route to it. Its `.lan` mapping lives in `pihole/dnsmasq.d/02-local-dns.conf`, which is untracked and edited on the NAS.
